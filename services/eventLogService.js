@@ -77,6 +77,9 @@ function serializeDescription(payload) {
       query: redactedPayload.request.query,
       params: redactedPayload.request.params,
       bodyFields: Object.keys(redactedPayload.request.body || {}),
+      ...(redactedPayload.request.body?.approvalCustomization
+        ? { approvalCustomization: redactedPayload.request.body.approvalCustomization }
+        : {}),
       files: redactedPayload.request.files,
     },
     response: redactedPayload.response,

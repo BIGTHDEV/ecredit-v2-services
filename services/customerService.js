@@ -1,4 +1,5 @@
-const { Op, fn, col, where, literal } = require('sequelize');
+const { Op, QueryTypes, fn, col, where, literal } = require('sequelize');
+const { randomUUID } = require('crypto');
 const { getModels } = require('../models');
 const customerLogService = require('./customerLogService');
 
@@ -300,6 +301,20 @@ function validationError(message) {
   return error;
 }
 
+async function customerTaxNoExists(taxNo) {
+  const normalizedTaxNo = typeof taxNo === 'string' ? taxNo.trim() : '';
+  if (!/^\d{13}$/.test(normalizedTaxNo)) {
+    throw validationError('TAX_NO must contain exactly 13 digits.');
+  }
+
+  const { Customer } = getModels();
+  const existing = await Customer.findOne({
+    where: { TAX_NO: normalizedTaxNo },
+    attributes: ['ID'],
+  });
+  return Boolean(existing);
+}
+
 function normalizeCustomerUpdate(payload) {
   const fields = ['TAX_NO', 'REGISTERED_DATE', 'REGISTERED_CAPITAL_AMOUNT', 'SIZE_ID', 'CUSTOMER_TYPE_EXTER', 'DIRECTORS', 'SHAREHOLDERS'];
   const update = {};
@@ -349,6 +364,105 @@ async function listEnabledSizes() {
   const { Size } = getModels();
   const sizes = await Size.findAll({ where: { ENABLED: '1' }, order: [['SORTING', 'ASC'], ['NAME', 'ASC']] });
   return sizes.map((size) => ({ id: size.ID, label: size.NAME }));
+}
+
+async function searchSoldToCustomers(search, salesGroup) {
+  const group = typeof salesGroup === 'string' ? salesGroup.trim() : '';
+  if (!['100', '200', '300', '999'].includes(group)) {
+    throw validationError('A valid Sales Group is required to search Sold-To customers.');
+  }
+
+  const query = typeof search === 'string' ? search.trim() : '';
+  if (query.length < 2 || query.length > 100) {
+    throw validationError('Sold-To search must be between 2 and 100 characters.');
+  }
+
+  const { Customer } = getModels();
+  const rows = await Customer.sequelize.query(
+    `SELECT TOP (50)
+       SOLDTO_NO,
+       SOLDTO_NAME_ENG,
+       CUST_PHONE,
+       CUST_FAX,
+       ADDRESS_ENG_SOLDTO,
+       TAX_NO
+     FROM S_vw_CustomerShipTo
+     WHERE SALE_GROUP = :salesGroup
+       AND (SOLDTO_NO LIKE :search OR SOLDTO_NAME_ENG LIKE :search)
+     ORDER BY SOLDTO_NO`,
+    { replacements: { salesGroup: group, search: `%${query}%` }, type: QueryTypes.SELECT },
+  );
+
+  return rows.map((row) => ({
+    SOLDTO_NO: String(row.SOLDTO_NO || ''),
+    SOLDTO_NAME_ENG: String(row.SOLDTO_NAME_ENG || ''),
+    CUST_PHONE: String(row.CUST_PHONE || ''),
+    CUST_FAX: String(row.CUST_FAX || ''),
+    ADDRESS_ENG_SOLDTO: String(row.ADDRESS_ENG_SOLDTO || ''),
+    TAX_NO: String(row.TAX_NO || ''),
+  }));
+}
+
+async function createCustomer(payload, updatedBy) {
+  const { Customer, Size } = getModels();
+  const update = normalizeCustomerUpdate(payload);
+  if (!Object.prototype.hasOwnProperty.call(update, 'TAX_NO')) {
+    throw validationError('TAX_NO is required.');
+  }
+
+  if (update.SIZE_ID) {
+    const size = await Size.findOne({ where: { ID: update.SIZE_ID, ENABLED: '1' } });
+    if (!size) throw validationError('SIZE_ID must reference an enabled size.');
+  }
+
+  const transaction = await Customer.sequelize.transaction();
+  const id = randomUUID();
+  try {
+    const existing = await Customer.findOne({
+      where: { TAX_NO: update.TAX_NO.trim() },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (existing) {
+      const error = new Error(`A customer extension already exists for TAX_NO ${update.TAX_NO.trim()}.`);
+      error.statusCode = 409;
+      error.code = 'RESOURCE_CONFLICT';
+      throw error;
+    }
+
+    if (typeof update.REGISTERED_DATE === 'string') {
+      const [year, month, day] = update.REGISTERED_DATE.split('-').map(Number);
+      update.REGISTERED_DATE = Customer.sequelize.fn('DATEFROMPARTS', year, month, day);
+    }
+
+    const values = {
+      ...update,
+      ID: id,
+      TAX_NO: update.TAX_NO.trim(),
+      ENABLED: '1',
+      CREATED_DATE: Customer.sequelize.fn('GETDATE'),
+      CREATED_BY: updatedBy,
+      UPDATED_DATE: Customer.sequelize.fn('GETDATE'),
+      UPDATED_BY: updatedBy,
+    };
+    const created = await Customer.create(values, { transaction });
+    await customerLogService.recordCustomerMutation({
+      customerId: id,
+      taxNo: values.TAX_NO,
+      action: 'insert',
+      source: 'customer-extensions.details.create',
+      actorId: updatedBy,
+      before: null,
+      after: created || values,
+      transaction,
+    });
+    await transaction.commit();
+  } catch (error) {
+    if (!transaction.finished) await transaction.rollback();
+    throw error;
+  }
+
+  return getCustomerById(id);
 }
 
 async function updateCustomer(id, payload, updatedBy) {
@@ -463,7 +577,10 @@ async function softDeleteCustomer(id, descriptions, updatedBy) {
 module.exports = {
   listCustomers,
   listEnabledSizes,
+  searchSoldToCustomers,
+  customerTaxNoExists,
   getCustomerById,
+  createCustomer,
   softDeleteCustomer,
   updateCustomer,
 };

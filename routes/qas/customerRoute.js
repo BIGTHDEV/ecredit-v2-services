@@ -7,6 +7,9 @@ const router = express.Router();
 
 router.get('/', authenticationMiddleware, customerController.listCustomers);
 router.get('/sizes', authenticationMiddleware, customerController.listEnabledSizes);
+router.get('/sold-to', authenticationMiddleware, customerController.searchSoldToCustomers);
+router.get('/tax-no-exists', authenticationMiddleware, customerController.customerTaxNoExists);
+router.post('/', authenticationMiddleware, customerController.createCustomer);
 router.get('/:id/customer-logs', authenticationMiddleware, customerLogController.listCustomerLogs);
 router.get('/:id/customer-logs/:logId', authenticationMiddleware, customerLogController.getCustomerLog);
 router.get('/:id', authenticationMiddleware, customerController.getCustomer);

@@ -3,7 +3,7 @@ const requestService = require('../../services/requestService');
 const { getRequestEmailModel } = require('../../services/requestEmailModelService');
 const { sendRequestCompletedEmail } = require('../../emails/requestCompletedEmail');
 const { notifyBestEffort } = require('../../services/requestWorkflowNotificationService');
-const { isAdminRole } = require('../../helpers/roleAuthorization');
+const { isSystemAdminRole } = require('../../helpers/roleAuthorization');
 const { effectiveEmployeeCode, approvalAuditEmployeeCode } = require('../../helpers/userIdentity');
 
 async function listRequests(req, res, next) {
@@ -182,7 +182,7 @@ async function saveFinalApproval(req, res, next) {
     const correlationId = res.locals.correlationId || 'N/A';
     const updatedBy = effectiveEmployeeCode(req.user?.profile);
     const auditBy = approvalAuditEmployeeCode(req.user?.profile);
-    const isSystemAdmin = isAdminRole(req.user?.profile?.ROLE, req.user?.profile?.ROLE_ID);
+    const isSystemAdmin = isSystemAdminRole(req.user?.profile?.ROLE, req.user?.profile?.ROLE_ID);
     if (!Number.isInteger(updatedBy) || !Number.isInteger(auditBy)) {
       const error = new Error('Authenticated user profile is missing a numeric employee code.');
       error.statusCode = 403;

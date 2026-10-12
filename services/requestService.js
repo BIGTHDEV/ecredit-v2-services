@@ -1026,7 +1026,7 @@ async function syncCustomerFromRequest(request, updatedBy, transaction, source, 
     SHAREHOLDERS: request.CUSTOMER_SHAREHOLDERS ?? null,
     DIRECTORS: request.CUSTOMER_DIRECTORS ?? null,
     UPDATED_DATE: Customer.sequelize.fn('GETDATE'),
-    UPDATED_BY: String(updatedBy),
+    UPDATED_BY: updatedBy,
   };
   const customer = await Customer.findOne({
     where: { ENABLED: '1', TAX_NO: taxNo },
@@ -1055,6 +1055,8 @@ async function syncCustomerFromRequest(request, updatedBy, transaction, source, 
     ID: randomUUID(),
     TAX_NO: taxNo,
     ...customerValues,
+    CREATED_DATE: Customer.sequelize.fn('GETDATE'),
+    CREATED_BY: updatedBy,
     ENABLED: '1',
   };
   const createdCustomer = await Customer.create(newCustomerValues, { transaction });
@@ -1565,6 +1567,7 @@ async function saveFinalApproval(id, payload, updatedBy, isSystemAdmin = false, 
            = CONVERT(VARCHAR(36), :finalStatusId) COLLATE DATABASE_DEFAULT
          AND (
            :isSystemAdmin = 1
+           OR TRY_CONVERT(BIGINT, TB1.SUBMITTED_BY) = TRY_CONVERT(BIGINT, :updatedBy)
            OR EXISTS (
              SELECT 1
              FROM APPROVALS AS TB2
@@ -1598,7 +1601,7 @@ async function saveFinalApproval(id, payload, updatedBy, isSystemAdmin = false, 
       },
     );
     if (!permissionRows[0]) {
-      const error = new Error('Only a BDS Review approver, System Admin, or Super Admin can save final approval data.');
+      const error = new Error('Only a BDS Review approver or System Admin can save final approval data.');
       error.statusCode = 403;
       error.code = 'FORBIDDEN';
       throw error;
@@ -1915,7 +1918,23 @@ async function processApprovalAction(id, action, payload, updatedBy, isSystemAdm
           },
           { where: { ID: id, ENABLED: true }, transaction },
         );
+      } else {
+        await Request.update(
+          {
+            UPDATED_BY: auditBy,
+            UPDATED_DATE: Request.sequelize.fn('GETDATE'),
+          },
+          { where: { ID: id, ENABLED: true }, transaction },
+        );
       }
+    } else if (action === 'save') {
+      await Request.update(
+        {
+          UPDATED_BY: auditBy,
+          UPDATED_DATE: Request.sequelize.fn('GETDATE'),
+        },
+        { where: { ID: id, ENABLED: true }, transaction },
+      );
     }
 
     await transaction.commit();
@@ -1948,6 +1967,7 @@ async function processFinalAction(id, action, payload, updatedBy, isSystemAdmin 
            = CONVERT(VARCHAR(36), :finalStatusId) COLLATE DATABASE_DEFAULT
          AND (
            :isSystemAdmin = 1
+           OR TRY_CONVERT(BIGINT, TB1.SUBMITTED_BY) = TRY_CONVERT(BIGINT, :updatedBy)
            OR EXISTS (
              SELECT 1
              FROM APPROVALS AS TB2
@@ -1981,7 +2001,7 @@ async function processFinalAction(id, action, payload, updatedBy, isSystemAdmin 
       },
     );
     if (!permissionRows[0]) {
-      const error = new Error('Only a BDS Review approver, System Admin, or Super Admin can complete this request.');
+      const error = new Error('Only a BDS Review approver or System Admin can complete this request.');
       error.statusCode = 403;
       error.code = 'FORBIDDEN';
       throw error;

@@ -135,6 +135,10 @@ describe('requestService.processApprovalAction', () => {
       UPDATED_BY: updatedBy,
       UPDATED_DATE: { fn: 'GETDATE' },
     }));
+    expect(requestUpdate).toHaveBeenCalledWith(
+      { UPDATED_BY: updatedBy, UPDATED_DATE: { fn: 'GETDATE' } },
+      { where: { ID: requestId, ENABLED: true }, transaction },
+    );
     expect(transaction.commit).toHaveBeenCalledTimes(1);
     expect(transaction.rollback).not.toHaveBeenCalled();
   });
@@ -154,6 +158,10 @@ describe('requestService.processApprovalAction', () => {
 
     expect(database.query.mock.calls[0][1].replacements.updatedBy).toBe(updatedBy);
     expect(approvalUpdate.mock.calls[0][0].UPDATED_BY).toBe(auditBy);
+    expect(requestUpdate).toHaveBeenCalledWith(
+      { UPDATED_BY: auditBy, UPDATED_DATE: { fn: 'GETDATE' } },
+      { where: { ID: requestId, ENABLED: true }, transaction },
+    );
   });
 
   it('changes approval status when approving the selected approval ID', async () => {
@@ -208,6 +216,28 @@ describe('requestService.processApprovalAction', () => {
       pendingApprovalTypeId: 'b4c27a6c-ab7c-4ce5-b885-997f9104c23d',
       approvedApprovalTypeId: 'approved-type',
     }));
+    expect(transaction.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates the request timestamp when an approval step is approved but others remain pending', async () => {
+    database.query
+      .mockResolvedValueOnce([{ ID: approvalId, APPROVER_ID: updatedBy, APPROVAL_STEP: 1 }])
+      .mockResolvedValueOnce([{ ID: 'approved-type' }])
+      .mockResolvedValueOnce([1])
+      .mockResolvedValueOnce([1])
+      .mockResolvedValueOnce([{ TOTAL: 1 }]);
+
+    await requestService.processApprovalAction(
+      requestId,
+      'approve',
+      approvalPayload('approve'),
+      updatedBy,
+    );
+
+    expect(requestUpdate).toHaveBeenCalledWith(
+      { UPDATED_BY: updatedBy, UPDATED_DATE: { fn: 'GETDATE' } },
+      { where: { ID: requestId, ENABLED: true }, transaction },
+    );
     expect(transaction.commit).toHaveBeenCalledTimes(1);
   });
 
@@ -339,6 +369,9 @@ describe('requestService.processApprovalAction', () => {
       updatedBy,
     );
 
+    expect(database.query.mock.calls[0][0]).toContain(
+      'TRY_CONVERT(BIGINT, TB1.SUBMITTED_BY) = TRY_CONVERT(BIGINT, :updatedBy)',
+    );
     expect(requestUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         STATUS_ID: completedStatusId,
@@ -400,6 +433,9 @@ describe('requestService.processApprovalAction', () => {
     );
     expect(database.query.mock.calls[0][1].replacements.updatedBy).toBe(updatedBy);
     expect(transaction.commit).toHaveBeenCalledTimes(1);
+    expect(database.query.mock.calls[0][0]).toContain(
+      'TRY_CONVERT(BIGINT, TB1.SUBMITTED_BY) = TRY_CONVERT(BIGINT, :updatedBy)',
+    );
   });
 
   it('does not issue a second rollback when Final processing has already closed the transaction', async () => {
@@ -532,7 +568,9 @@ describe('requestService.submitRequest', () => {
           BUSINESS_TYPE_EXTER: 'External business',
           SIZE_ID: requestRecord.CUSTOMER_SIZE_ID,
           DIRECTORS: 'Directors',
-          UPDATED_BY: String(updatedBy),
+          CREATED_DATE: { fn: 'GETDATE' },
+          UPDATED_BY: updatedBy,
+          CREATED_BY: updatedBy,
           ENABLED: '1',
         }),
         { transaction },
@@ -605,8 +643,10 @@ describe('requestService.submitRequest', () => {
         SIZE_ID: 'size-1',
         SHAREHOLDERS: 'Shareholders',
         DIRECTORS: 'Directors',
-        UPDATED_BY: String(updatedBy),
+        CREATED_DATE: { fn: 'GETDATE' },
+        UPDATED_BY: updatedBy,
         UPDATED_DATE: { fn: 'GETDATE' },
+        CREATED_BY: updatedBy,
         ENABLED: '1',
       }),
       { transaction },
@@ -654,7 +694,7 @@ describe('requestService.submitRequest', () => {
       expect.objectContaining({
         REGISTERED_CAPITAL_AMOUNT: '2500000',
         SIZE_ID: 'size-2',
-        UPDATED_BY: String(updatedBy),
+        UPDATED_BY: updatedBy,
       }),
       { transaction },
     );

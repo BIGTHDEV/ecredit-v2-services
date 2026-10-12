@@ -64,6 +64,44 @@ async function listEnabledSizes(req, res, next) {
   }
 }
 
+async function searchSoldToCustomers(req, res, next) {
+  try {
+    const data = await customerService.searchSoldToCustomers(req.query.search, req.query.salesGroup);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.status(200).json({ success: true, data, correlationId: res.locals.correlationId || 'N/A' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function customerTaxNoExists(req, res, next) {
+  try {
+    const data = await customerService.customerTaxNoExists(req.query.taxNo);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.status(200).json({ success: true, data, correlationId: res.locals.correlationId || 'N/A' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function createCustomer(req, res, next) {
+  try {
+    const correlationId = res.locals.correlationId || 'N/A';
+    const updatedBy = effectiveEmployeeCode(req.user?.profile);
+    if (!updatedBy) {
+      const error = new Error('Authenticated user profile is missing an employee code.');
+      error.statusCode = 403;
+      error.code = 'FORBIDDEN';
+      throw error;
+    }
+
+    const customer = await customerService.createCustomer(req.body, updatedBy);
+    res.status(201).json({ success: true, data: customer, correlationId });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function updateCustomer(req, res, next) {
   try {
     const correlationId = res.locals.correlationId || 'N/A';
@@ -126,4 +164,13 @@ async function deleteCustomer(req, res, next) {
   }
 }
 
-module.exports = { listCustomers, listEnabledSizes, getCustomer, updateCustomer, deleteCustomer };
+module.exports = {
+  listCustomers,
+  listEnabledSizes,
+  searchSoldToCustomers,
+  customerTaxNoExists,
+  getCustomer,
+  createCustomer,
+  updateCustomer,
+  deleteCustomer,
+};

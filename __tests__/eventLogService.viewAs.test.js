@@ -17,10 +17,10 @@ describe('event log actor while Viewing As', () => {
     getModels.mockReturnValue({ Log });
   });
 
-  async function recordEvent(path, isViewingAs = true) {
+  async function recordEvent(path, isViewingAs = true, body = {}) {
     const effectiveCode = isViewingAs ? '20261631' : '20221459';
     const req = {
-      method: path.endsWith('approval-action') ? 'POST' : 'PATCH',
+      method: path.endsWith('approval-action') || path.endsWith('/submit') ? 'POST' : 'PATCH',
       originalUrl: path,
       path,
       user: {
@@ -37,7 +37,7 @@ describe('event log actor while Viewing As', () => {
           IS_VIEWING_AS: isViewingAs,
         },
       },
-      body: {},
+      body,
       query: {},
     };
     const res = { statusCode: 200, locals: { correlationId: 'correlation-1' } };
@@ -86,5 +86,35 @@ describe('event log actor while Viewing As', () => {
     const event = await recordEvent('/dev/api/requests/request-1/customer-info', false);
 
     expect(JSON.parse(event.DESCRIPTION)).not.toHaveProperty('viewing');
+  });
+
+  it('persists approval customization reason and default/selected steps in Submit event payload', async () => {
+    const approvalCustomization = {
+      description: 'The default approver is unavailable.',
+      defaultSteps: [{ approverId: 'default-approver' }],
+      selectedSteps: [{ approverId: 'selected-approver' }],
+    };
+    const event = await recordEvent('/dev/api/requests/request-1/submit', true, {
+      approvalCustomization,
+    });
+
+    expect(JSON.parse(event.DESCRIPTION).request.body.approvalCustomization).toEqual(approvalCustomization);
+  });
+
+  it('preserves approval customization details when a Submit event payload is truncated', async () => {
+    const approvalCustomization = {
+      description: 'The default approver is unavailable.',
+      defaultSteps: [{ approverId: 'default-approver' }],
+      selectedSteps: [{ approverId: 'selected-approver' }],
+    };
+    const event = await recordEvent('/dev/api/requests/request-1/submit', true, {
+      approvalCustomization,
+      longField: 'x'.repeat(33 * 1024),
+    });
+    const payload = JSON.parse(event.DESCRIPTION);
+
+    expect(payload.payloadTruncated).toBe(true);
+    expect(payload.request.bodyFields).toContain('approvalCustomization');
+    expect(payload.request.approvalCustomization).toEqual(approvalCustomization);
   });
 });

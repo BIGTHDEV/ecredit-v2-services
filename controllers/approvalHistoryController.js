@@ -1,6 +1,6 @@
 const requestService = require('../services/requestService');
 const { notifyBestEffort } = require('../services/requestWorkflowNotificationService');
-const { isAdminRole } = require('../helpers/roleAuthorization');
+const { isSystemAdminRole } = require('../helpers/roleAuthorization');
 const { effectiveEmployeeCode, approvalAuditEmployeeCode } = require('../helpers/userIdentity');
 
 const FINAL_STATUS_ID = '014e8e8b-42cf-4b2f-8cae-e395e26efbcd';
@@ -64,7 +64,7 @@ async function processApprovalAction(req, res, next) {
     const correlationId = res.locals.correlationId || 'N/A';
     const updatedBy = effectiveEmployeeCode(req.user?.profile);
     const auditActorCode = approvalAuditEmployeeCode(req.user?.profile);
-    const isSystemAdmin = isAdminRole(req.user?.profile?.ROLE, req.user?.profile?.ROLE_ID);
+    const isSystemAdmin = isSystemAdminRole(req.user?.profile?.ROLE, req.user?.profile?.ROLE_ID);
     if (!Number.isInteger(updatedBy) || !Number.isInteger(auditActorCode)) {
       const error = new Error('Authenticated user profile is missing a numeric employee code.');
       error.statusCode = 403;
