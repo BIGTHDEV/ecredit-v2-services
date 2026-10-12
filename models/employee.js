@@ -11,10 +11,11 @@ module.exports = (sequelize) =>
       },
       USERNAME: DataTypes.STRING,
       INITIALS: DataTypes.STRING,
-        NAME_ENG: DataTypes.STRING,
+      NAME_ENG: DataTypes.STRING,
       CURRENT_EMAIL: DataTypes.STRING,
       APPROVER_ID1: DataTypes.STRING,
       APPROVER_ID2: DataTypes.STRING,
+      WORK_STATUS: DataTypes.STRING,
     },
     {
       tableName: 'S_EMPLOYEE1',

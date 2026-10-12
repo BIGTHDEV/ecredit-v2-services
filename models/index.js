@@ -17,6 +17,8 @@ const defineLog = require('./log');
 const defineCustomerLog = require('./customerLog');
 const defineLogType = require('./logType');
 const defineApproval = require('./approval');
+const defineApprover = require('./approver');
+const defineApproverType = require('./approverType');
 const defineEmail = require('./email');
 
 /**
@@ -46,11 +48,14 @@ function initModels(sequelize) {
   const CustomerLog = defineCustomerLog(sequelize);
   const LogType = defineLogType(sequelize);
   const Approval = defineApproval(sequelize);
+  const Approver = defineApprover(sequelize);
+  const ApproverType = defineApproverType(sequelize);
   const Email = defineEmail(sequelize);
 
   // TB1 -> TB2 (USERS.ID = S_EMPLOYEE1.EMP_CODE)
   User.hasOne(Employee, { as: 'employee', foreignKey: 'EMP_CODE', sourceKey: 'ID' });
   Employee.belongsTo(User, { as: 'user', foreignKey: 'EMP_CODE', targetKey: 'ID' });
+  User.belongsTo(Employee, { as: 'updatedByEmployee', foreignKey: 'UPDATED_BY', targetKey: 'EMP_CODE' });
 
   // TB1 -> TB3 (USERS.VIEW_AS = S_EMPLOYEE1.EMP_CODE)
   User.belongsTo(Employee, { as: 'viewAsEmployee', foreignKey: 'VIEW_AS', targetKey: 'EMP_CODE' });
@@ -58,6 +63,10 @@ function initModels(sequelize) {
   // TB3 -> TB5 / TB3 -> TB6 (self-join via APPROVER_ID1 / APPROVER_ID2)
   Employee.belongsTo(Employee, { as: 'manager1', foreignKey: 'APPROVER_ID1', targetKey: 'EMP_CODE' });
   Employee.belongsTo(Employee, { as: 'manager2', foreignKey: 'APPROVER_ID2', targetKey: 'EMP_CODE' });
+
+  Approver.belongsTo(Employee, { as: 'employee', foreignKey: 'APPROVER_ID', targetKey: 'EMP_CODE' });
+  Approver.belongsTo(Employee, { as: 'updatedByEmployee', foreignKey: 'UPDATED_BY', targetKey: 'EMP_CODE' });
+  Approver.belongsTo(ApproverType, { as: 'approverType', foreignKey: 'APPROVER_TYPE_ID', targetKey: 'ID' });
 
   // TB1 -> TB4 (USERS.ID = S_MAPPING_COST_CENTER.EMPLOYEE_CODE)
   User.hasOne(CostCenterMapping, { as: 'costCenter', foreignKey: 'EMPLOYEE_CODE', sourceKey: 'ID' });
@@ -118,6 +127,8 @@ function initModels(sequelize) {
     CustomerLog,
     LogType,
     Approval,
+    Approver,
+    ApproverType,
     Email,
   };
   return models;

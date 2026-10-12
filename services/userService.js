@@ -1,4 +1,4 @@
-const { Op, fn, QueryTypes } = require('sequelize');
+const { Op, col, fn, QueryTypes, where } = require('sequelize');
 const { getDatabase } = require('../config/database');
 const { getModels } = require('../models');
 
@@ -12,6 +12,8 @@ const SORT_FIELDS = {
   DEPARTMENT: 'costCenter.DEPARTMENT',
   MANAGER_1: 'manager1.USERNAME',
   MANAGER_2: 'manager2.USERNAME',
+  UPDATED_DATE: 'user.UPDATED_DATE',
+  UPDATED_BY: 'updatedByEmployee.INITIALS',
   SYSTEM_ACTIVE: 'user.ENABLED',
 };
 
@@ -35,6 +37,19 @@ function buildWhere(query) {
     }
   }
 
+  const updatedBy = query.UPDATED_BY?.trim();
+  if (updatedBy) {
+    filters.push(where(fn('CONCAT', col('user.updatedByEmployee.INITIALS'), '-', col('user.updatedByEmployee.USERNAME')), { [Op.like]: `%${updatedBy}%` }));
+  }
+
+  const updatedDate = query.UPDATED_DATE?.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(updatedDate || '')) {
+    const start = new Date(`${updatedDate}T00:00:00.000Z`);
+    if (!Number.isNaN(start.getTime())) {
+      filters.push({ '$user.UPDATED_DATE$': { [Op.gte]: start, [Op.lt]: new Date(start.getTime() + 24 * 60 * 60 * 1000) } });
+    }
+  }
+
   return filters.length ? { [Op.and]: filters } : undefined;
 }
 
@@ -43,6 +58,16 @@ function buildOrder(sort, dir, models) {
   const field = SORT_FIELDS[sort] || 'EMP_CODE';
   if (field === 'user.ENABLED') {
     return [[{ model: models.User, as: 'user' }, 'ENABLED', direction], ['EMP_CODE', 'ASC']];
+  }
+  if (field === 'user.UPDATED_DATE') {
+    return [[{ model: models.User, as: 'user' }, 'UPDATED_DATE', direction], ['EMP_CODE', 'ASC']];
+  }
+  if (field === 'updatedByEmployee.INITIALS') {
+    return [
+      [{ model: models.User, as: 'user' }, { model: models.Employee, as: 'updatedByEmployee' }, 'INITIALS', direction],
+      [{ model: models.User, as: 'user' }, { model: models.Employee, as: 'updatedByEmployee' }, 'USERNAME', direction],
+      ['EMP_CODE', 'ASC'],
+    ];
   }
   if (field.startsWith('costCenter.')) {
     return [[{ model: models.User, as: 'user' }, { model: models.CostCenterMapping, as: 'costCenter' }, field.split('.')[1], direction], ['EMP_CODE', 'ASC']];
@@ -58,6 +83,23 @@ function buildOrder(sort, dir, models) {
 
 function formatUserName(employee) {
   return employee ? `${employee.INITIALS || ''}-${employee.USERNAME || ''}`.replace(/^-|-$/g, '') : '';
+}
+
+function formatUpdatedDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'UTC',
+  }).formatToParts(date);
+  const part = (type) => parts.find((entry) => entry.type === type)?.value || '';
+  return `${part('day')} ${part('month')} ${part('year')} ${part('hour')}:${part('minute')} ${part('dayPeriod').toUpperCase()}`;
 }
 
 function isEnabled(value) {
@@ -89,6 +131,8 @@ function mapUser(employee) {
     MANAGER_1: formatUserName(employee.manager1),
     MANAGER_2: formatUserName(employee.manager2),
     ROLES: [...new Set(roles)].join(', '),
+    UPDATED_DATE: formatUpdatedDate(user?.UPDATED_DATE),
+    UPDATED_BY: formatUserName(user?.updatedByEmployee),
     SYSTEM_ACTIVE: isEnabled(user?.ENABLED),
   };
 }
@@ -133,6 +177,7 @@ async function listUsers(query) {
       { model: User, as: 'user', required: true, include: [
         { model: CostCenterMapping, as: 'costCenter', required: false },
         { model: UserRole, as: 'userRoles', required: false, include: [{ model: Role, as: 'role', required: false }] },
+        { model: Employee, as: 'updatedByEmployee', required: false, attributes: ['EMP_CODE', 'INITIALS', 'USERNAME'] },
       ] },
       { model: Employee, as: 'manager1', required: false },
       { model: Employee, as: 'manager2', required: false },

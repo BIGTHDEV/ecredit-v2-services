@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/15</span>
+                <span class='fraction'>0/18</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/15</span>
+                <span class='fraction'>0/18</span>
             </div>
         
             
@@ -81,13 +81,21 @@
 <a name='L16'></a><a href='#L16'>16</a>
 <a name='L17'></a><a href='#L17'>17</a>
 <a name='L18'></a><a href='#L18'>18</a>
-<a name='L19'></a><a href='#L19'>19</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -101,20 +109,24 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const express = <span class="cstat-no" title="statement not covered" >require('express');</span>
 const authenticationMiddleware = <span class="cstat-no" title="statement not covered" >require('../../middlewares/authentication');</span>
+const customerAccessMiddleware = <span class="cstat-no" title="statement not covered" >require('../../middlewares/customerAccess');</span>
 const customerController = <span class="cstat-no" title="statement not covered" >require('../../controllers/qas/customerController');</span>
 const customerLogController = <span class="cstat-no" title="statement not covered" >require('../../controllers/customerLogController');</span>
 &nbsp;
 const router = <span class="cstat-no" title="statement not covered" >express.Router();</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >router.get('/', authenticationMiddleware, customerController.listCustomers);</span>
-<span class="cstat-no" title="statement not covered" >router.get('/sizes', authenticationMiddleware, customerController.listEnabledSizes);</span>
-<span class="cstat-no" title="statement not covered" >router.get('/sold-to', authenticationMiddleware, customerController.searchSoldToCustomers);</span>
-<span class="cstat-no" title="statement not covered" >router.post('/', authenticationMiddleware, customerController.createCustomer);</span>
-<span class="cstat-no" title="statement not covered" >router.get('/:id/customer-logs', authenticationMiddleware, customerLogController.listCustomerLogs);</span>
-<span class="cstat-no" title="statement not covered" >router.get('/:id/customer-logs/:logId', authenticationMiddleware, customerLogController.getCustomerLog);</span>
-<span class="cstat-no" title="statement not covered" >router.get('/:id', authenticationMiddleware, customerController.getCustomer);</span>
-<span class="cstat-no" title="statement not covered" >router.patch('/:id', authenticationMiddleware, customerController.updateCustomer);</span>
-<span class="cstat-no" title="statement not covered" >router.delete('/:id', authenticationMiddleware, customerController.deleteCustomer);</span>
+<span class="cstat-no" title="statement not covered" >router.use(authenticationMiddleware, customerAccessMiddleware);</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >router.get('/', customerController.listCustomers);</span>
+<span class="cstat-no" title="statement not covered" >router.get('/sizes', customerController.listEnabledSizes);</span>
+<span class="cstat-no" title="statement not covered" >router.get('/sold-to', customerController.searchSoldToCustomers);</span>
+<span class="cstat-no" title="statement not covered" >router.get('/tax-no-exists', customerController.customerTaxNoExists);</span>
+<span class="cstat-no" title="statement not covered" >router.post('/', customerController.createCustomer);</span>
+<span class="cstat-no" title="statement not covered" >router.get('/:id/customer-logs', customerLogController.listCustomerLogs);</span>
+<span class="cstat-no" title="statement not covered" >router.get('/:id/customer-logs/:logId', customerLogController.getCustomerLog);</span>
+<span class="cstat-no" title="statement not covered" >router.get('/:id', customerController.getCustomer);</span>
+<span class="cstat-no" title="statement not covered" >router.patch('/:id', customerController.updateCustomer);</span>
+<span class="cstat-no" title="statement not covered" >router.delete('/:id', customerController.deleteCustomer);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >module.exports = router;</span>
 &nbsp;</pre></td></tr></table></pre>
@@ -124,7 +136,7 @@ const router = <span class="cstat-no" title="statement not covered" >express.Rou
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-12T04:24:44.596Z
+                at 2026-10-12T10:51:38.700Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

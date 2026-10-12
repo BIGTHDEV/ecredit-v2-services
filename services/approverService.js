@@ -1,14 +1,17 @@
 const { randomUUID } = require('crypto');
-const { QueryTypes } = require('sequelize');
-const { getDatabase } = require('../config/database');
+const { Op, cast, col, fn, where } = require('sequelize');
+const { getModels } = require('../models');
 
 const SORT_FIELDS = {
-  CODE: 'TB2.EMP_CODE',
-  NAME: 'TB2.NAME_ENG',
-  USER: 'TB2.USERNAME',
-  EMAIL: 'TB2.CURRENT_EMAIL',
-  ACTIVE: 'TB1.ENABLED',
+  CODE: 'APPROVER_ID',
+  NAME: 'NAME_ENG',
+  APPROVER_TYPE: 'NAME',
+  DESCRIPTION: 'DESCRIPTION',
+  EMAIL: 'CURRENT_EMAIL',
+  UPDATED_DATE: 'UPDATED_DATE',
+  ACTIVE: 'ENABLED',
 };
+const APPROVER_NAME_MAX_LENGTH = 50;
 
 function normalizePage(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -19,189 +22,313 @@ function isEnabled(value) {
   return value === true || value === 1 || value === '1';
 }
 
-function buildFilters(query) {
-  const filters = ['1 = 1'];
-  const replacements = {};
-  const fields = { CODE: 'TB2.EMP_CODE', NAME: 'TB2.NAME_ENG', USER: "CONCAT(TB2.INITIALS, '-', TB2.USERNAME)", EMAIL: 'TB2.CURRENT_EMAIL' };
-
-  Object.entries(fields).forEach(([key, field]) => {
-    const value = typeof query[key] === 'string' ? query[key].trim() : '';
-    if (!value) return;
-    filters.push(`${field} LIKE :filter${key}`);
-    replacements[`filter${key}`] = `%${value}%`;
-  });
-
-  return { clause: filters.join(' AND '), replacements };
+function formatEmployeeName(employee) {
+  return employee
+    ? `${employee.INITIALS || ''}-${employee.USERNAME || ''}`.replace(/^-|-$/g, '')
+    : '';
 }
 
-function mapApprover(row) {
+function formatUpdatedDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'UTC',
+  }).formatToParts(date);
+  const part = (type) => parts.find((entry) => entry.type === type)?.value || '';
+  return `${part('day')} ${part('month')} ${part('year')} ${part('hour')}:${part('minute')} ${part('dayPeriod').toUpperCase()}`;
+}
+
+function mapApprover(approver) {
   return {
-    ID: String(row.ID),
-    CODE: row.CODE == null ? '' : String(row.CODE),
-    NAME: row.NAME || '',
-    USER: row.USER || '',
-    EMAIL: row.EMAIL || '',
-    ACTIVE: isEnabled(row.ACTIVE),
+    ID: String(approver.ID),
+    CODE: approver.APPROVER_ID == null ? '' : String(approver.APPROVER_ID),
+    APPROVER_TYPE_ID: String(approver.APPROVER_TYPE_ID),
+    APPROVER_TYPE: approver.approverType?.NAME || '',
+    NAME: approver.employee?.NAME_ENG || '',
+    DESCRIPTION: approver.DESCRIPTION || '',
+    EMAIL: (approver.employee?.CURRENT_EMAIL || '').toLowerCase(),
+    UPDATED_DATE: formatUpdatedDate(approver.UPDATED_DATE),
+    UPDATED_BY: formatEmployeeName(approver.updatedByEmployee),
+    ACTIVE: isEnabled(approver.ENABLED),
   };
 }
 
+function buildApproverWhere(query) {
+  const filters = [];
+  const code = typeof query.CODE === 'string' ? query.CODE.trim() : '';
+  const description = typeof query.DESCRIPTION === 'string' ? query.DESCRIPTION.trim() : '';
+  const updatedBy = typeof query.UPDATED_BY === 'string' ? query.UPDATED_BY.trim() : '';
+  const updatedDate = typeof query.UPDATED_DATE === 'string' ? query.UPDATED_DATE.trim() : '';
+  const active = typeof query.ACTIVE === 'string' ? query.ACTIVE.trim().toLowerCase() : '';
+
+  if (code) filters.push(where(cast(col('APPROVER_ID'), 'NVARCHAR'), { [Op.like]: `%${code}%` }));
+  if (description) filters.push({ DESCRIPTION: { [Op.like]: `%${description}%` } });
+  if (updatedBy) filters.push(where(fn('CONCAT', col('updatedByEmployee.INITIALS'), '-', col('updatedByEmployee.USERNAME')), { [Op.like]: `%${updatedBy}%` }));
+  if (/^\d{4}-\d{2}-\d{2}$/.test(updatedDate)) {
+    const start = new Date(`${updatedDate}T00:00:00.000Z`);
+    if (!Number.isNaN(start.getTime())) {
+      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+      filters.push({ UPDATED_DATE: { [Op.gte]: start, [Op.lt]: end } });
+    }
+  }
+  if (active === 'active' || active === 'true') filters.push({ ENABLED: true });
+  if (active === 'inactive' || active === 'false') filters.push({ ENABLED: false });
+
+  return filters.length ? { [Op.and]: filters } : undefined;
+}
+
+function buildEmployeeWhere(query) {
+  const filters = [];
+  const name = typeof query.NAME === 'string' ? query.NAME.trim() : '';
+  const email = typeof query.EMAIL === 'string' ? query.EMAIL.trim() : '';
+
+  if (name) filters.push({ NAME_ENG: { [Op.like]: `%${name}%` } });
+  if (email) filters.push({ CURRENT_EMAIL: { [Op.like]: `%${email}%` } });
+
+  return filters.length ? { [Op.and]: filters } : undefined;
+}
+
+function buildApproverTypeWhere(query) {
+  const approverType = typeof query.APPROVER_TYPE === 'string' ? query.APPROVER_TYPE.trim() : '';
+  return approverType ? { NAME: { [Op.like]: `%${approverType}%` } } : undefined;
+}
+
+function buildOrder(sort, dir, Employee, ApproverType) {
+  const direction = String(dir).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+  const field = SORT_FIELDS[sort];
+  if (field === 'NAME_ENG' || field === 'CURRENT_EMAIL') {
+    return [[{ model: Employee, as: 'employee' }, field, direction], ['ID', 'ASC']];
+  }
+  if (sort === 'APPROVER_TYPE') {
+    return [[{ model: ApproverType, as: 'approverType' }, 'NAME', direction], ['APPROVER_ID', 'ASC'], ['ID', 'ASC']];
+  }
+  if (sort === 'UPDATED_BY') {
+    return [[{ model: Employee, as: 'updatedByEmployee' }, 'INITIALS', direction],
+      [{ model: Employee, as: 'updatedByEmployee' }, 'USERNAME', direction], ['ID', 'ASC']];
+  }
+  return field === 'APPROVER_ID'
+    ? [[field, direction], ['ID', 'ASC']]
+    : [[field || SORT_FIELDS.CODE, direction], ['APPROVER_ID', 'ASC'], ['ID', 'ASC']];
+}
+
 async function listApprovers(query = {}) {
-  const database = getDatabase();
+  const { Approver, ApproverType, Employee } = getModels();
   const page = normalizePage(query.page, 1);
   const pageSize = Math.min(normalizePage(query.pageSize, 25), 100);
-  const direction = String(query.dir).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
-  const sortField = SORT_FIELDS[query.sort] || SORT_FIELDS.CODE;
-  const { clause, replacements } = buildFilters(query);
-  const offset = (page - 1) * pageSize;
+  const employeeWhere = buildEmployeeWhere(query);
+  const approverTypeWhere = buildApproverTypeWhere(query);
+  const result = await Approver.findAndCountAll({
+    where: buildApproverWhere(query),
+    include: [
+      {
+        model: Employee,
+        as: 'employee',
+        attributes: ['EMP_CODE', 'NAME_ENG', 'INITIALS', 'USERNAME', 'CURRENT_EMAIL'],
+        required: Boolean(employeeWhere),
+        where: employeeWhere,
+      },
+      {
+        model: ApproverType,
+        as: 'approverType',
+        attributes: ['NAME'],
+        required: Boolean(approverTypeWhere),
+        where: approverTypeWhere,
+      },
+      {
+        model: Employee,
+        as: 'updatedByEmployee',
+        attributes: ['EMP_CODE', 'INITIALS', 'USERNAME'],
+        required: Boolean(query.UPDATED_BY),
+      },
+    ],
+    distinct: true,
+    order: buildOrder(query.sort, query.dir, Employee, ApproverType),
+    offset: (page - 1) * pageSize,
+    limit: pageSize,
+    attributes: ['ID', 'APPROVER_ID', 'APPROVER_TYPE_ID', 'NAME', 'DESCRIPTION', 'ENABLED', 'UPDATED_DATE', 'UPDATED_BY'],
+  });
+  const totalItems = Number(result.count);
 
-  const [countRows, rows] = await Promise.all([
-    database.query(
-      `SELECT COUNT(1) AS TOTAL
-       FROM APPROVERS AS TB1
-       LEFT JOIN S_EMPLOYEE1 AS TB2 ON TB1.APPROVER_ID = TB2.EMP_CODE
-       WHERE ${clause}`,
-      { replacements, type: QueryTypes.SELECT },
-    ),
-    database.query(
-      `SELECT TB1.ID,
-              TB2.EMP_CODE AS CODE,
-              TB2.NAME_ENG AS NAME,
-              CONCAT(TB2.INITIALS, '-', TB2.USERNAME) AS [USER],
-              TB2.CURRENT_EMAIL AS EMAIL,
-              TB1.ENABLED AS ACTIVE
-       FROM APPROVERS AS TB1
-       LEFT JOIN S_EMPLOYEE1 AS TB2 ON TB1.APPROVER_ID = TB2.EMP_CODE
-       WHERE ${clause}
-       ORDER BY ${sortField} ${direction}, TB1.ID ASC
-       OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY`,
-      { replacements: { ...replacements, offset, pageSize }, type: QueryTypes.SELECT },
-    ),
-  ]);
-
-  const totalItems = Number(countRows[0]?.TOTAL || 0);
   return {
-    items: rows.map(mapApprover),
+    items: result.rows.map(mapApprover),
     pagination: { page, pageSize, totalItems, totalPages: Math.max(1, Math.ceil(totalItems / pageSize)) },
   };
 }
 
 async function listEmployeeOptions(search = '') {
-  const database = getDatabase();
+  const { Employee } = getModels();
   const value = typeof search === 'string' ? search.trim() : '';
-  const rows = await database.query(
-    `SELECT TOP 100 EMP_CODE AS CODE,
-            NAME_ENG AS NAME,
-            CONCAT(INITIALS, '-', USERNAME) AS [USER],
-            CURRENT_EMAIL AS EMAIL
-     FROM S_EMPLOYEE1
-     WHERE WORK_STATUS = '3'
-       AND (:search = '' OR EMP_CODE LIKE :pattern OR NAME_ENG LIKE :pattern OR USERNAME LIKE :pattern OR CURRENT_EMAIL LIKE :pattern)
-     ORDER BY NAME_ENG ASC, EMP_CODE ASC`,
-    { replacements: { search: value, pattern: `%${value}%` }, type: QueryTypes.SELECT },
-  );
-  return rows.map((row) => ({ CODE: String(row.CODE), NAME: row.NAME || '', USER: row.USER || '', EMAIL: row.EMAIL || '' }));
+  const whereClause = { WORK_STATUS: '3' };
+  if (value) {
+    whereClause[Op.and] = [{
+      [Op.or]: [
+        where(cast(col('EMP_CODE'), 'NVARCHAR'), { [Op.like]: `%${value}%` }),
+        { NAME_ENG: { [Op.like]: `%${value}%` } },
+        { USERNAME: { [Op.like]: `%${value}%` } },
+        { CURRENT_EMAIL: { [Op.like]: `%${value}%` } },
+      ],
+    }];
+  }
+  const employees = await Employee.findAll({
+    attributes: ['EMP_CODE', 'NAME_ENG', 'INITIALS', 'USERNAME', 'CURRENT_EMAIL'],
+    where: whereClause,
+    order: [['NAME_ENG', 'ASC'], ['EMP_CODE', 'ASC']],
+    limit: 100,
+  });
+  return employees.map((employee) => ({
+    CODE: String(employee.EMP_CODE),
+    NAME: employee.NAME_ENG || '',
+    USER: formatEmployeeName(employee),
+    EMAIL: employee.CURRENT_EMAIL || '',
+  }));
+}
+
+async function listApproverTypeOptions() {
+  const { ApproverType } = getModels();
+  const types = await ApproverType.findAll({
+    attributes: ['ID', 'NAME'],
+    where: { ENABLED: true },
+    order: [['SORTING', 'ASC'], ['ID', 'ASC']],
+  });
+  return types.map((type) => ({ ID: String(type.ID), NAME: type.NAME }));
 }
 
 async function findApprover(id) {
-  const database = getDatabase();
-  const rows = await database.query(
-    `SELECT TOP 1 ID, APPROVER_ID, ENABLED
-     FROM APPROVERS
-     WHERE ID = :id`,
-    { replacements: { id }, type: QueryTypes.SELECT },
-  );
-  return rows[0] || null;
+  const { Approver } = getModels();
+  return Approver.findByPk(id);
 }
 
-async function ensureEmployeeExists(employeeCode) {
-  const database = getDatabase();
-  const rows = await database.query(
-    `SELECT TOP 1 EMP_CODE
-     FROM S_EMPLOYEE1
-     WHERE EMP_CODE = :employeeCode`,
-    { replacements: { employeeCode }, type: QueryTypes.SELECT },
-  );
-  return Boolean(rows[0]);
+async function findEmployee(employeeCode) {
+  const { Employee } = getModels();
+  return Employee.findByPk(employeeCode);
 }
 
-async function createApprover(employeeCode, enabled, actorCode) {
-  const database = getDatabase();
-  if (!(await ensureEmployeeExists(employeeCode))) return { kind: 'employee-not-found' };
+async function isActiveApproverType(approverTypeId) {
+  const { ApproverType } = getModels();
+  return Boolean(await ApproverType.findOne({
+    where: { ID: approverTypeId, ENABLED: true },
+    attributes: ['ID'],
+  }));
+}
 
-  const existing = await database.query(
-    `SELECT TOP 1 ID, ENABLED
-     FROM APPROVERS
-     WHERE APPROVER_ID = :employeeCode
-     ORDER BY CASE WHEN ENABLED = '1' THEN 0 ELSE 1 END, ID`,
-    { replacements: { employeeCode }, type: QueryTypes.SELECT },
-  );
-  if (existing[0]?.ENABLED === true || existing[0]?.ENABLED === 1 || existing[0]?.ENABLED === '1') return { kind: 'duplicate' };
+function validateApproverName(employee) {
+  const name = employee.NAME_ENG || '';
+  return name.length <= APPROVER_NAME_MAX_LENGTH ? { name } : { kind: 'employee-name-too-long' };
+}
+
+async function createApprover(employeeCode, approverTypeId, description, enabled, actorCode) {
+  const { Approver } = getModels();
+  const employee = await findEmployee(employeeCode);
+  if (!employee) return { kind: 'employee-not-found' };
+  const name = validateApproverName(employee);
+  if (name.kind) return name;
+  if (!(await isActiveApproverType(approverTypeId))) return { kind: 'approver-type-not-found' };
+
+  const existing = await Approver.findOne({
+    where: { APPROVER_ID: employeeCode, ENABLED: true },
+    attributes: ['ID'],
+  });
+  if (existing) return { kind: 'duplicate' };
 
   const id = randomUUID();
-  await database.query(
-    `INSERT INTO APPROVERS (ID, APPROVER_ID, ENABLED, CREATED_BY, CREATED_DATE, UPDATED_BY, UPDATED_DATE)
-     VALUES (:id, :employeeCode, :enabled, :actorCode, GETDATE(), :actorCode, GETDATE())`,
-    { replacements: { id, employeeCode, enabled: enabled ? '1' : '0', actorCode }, type: QueryTypes.INSERT },
-  );
+  await Approver.create({
+    ID: id,
+    NAME: name.name,
+    APPROVER_ID: employeeCode,
+    APPROVER_TYPE_ID: approverTypeId,
+    DESCRIPTION: description,
+    ENABLED: enabled,
+    SORTING: null,
+    CREATED_DATE: Approver.sequelize.fn('GETDATE'),
+    CREATED_BY: actorCode,
+    UPDATED_DATE: Approver.sequelize.fn('GETDATE'),
+    UPDATED_BY: actorCode,
+  });
   return { item: await getApproverById(id) };
 }
 
 async function getApproverById(id) {
-  const database = getDatabase();
-  const rows = await database.query(
-    `SELECT TOP 1 TB1.ID,
-            TB2.EMP_CODE AS CODE,
-            TB2.NAME_ENG AS NAME,
-            CONCAT(TB2.INITIALS, '-', TB2.USERNAME) AS [USER],
-            TB2.CURRENT_EMAIL AS EMAIL,
-            TB1.ENABLED AS ACTIVE
-     FROM APPROVERS AS TB1
-     LEFT JOIN S_EMPLOYEE1 AS TB2 ON TB1.APPROVER_ID = TB2.EMP_CODE
-     WHERE TB1.ID = :id`,
-    { replacements: { id }, type: QueryTypes.SELECT },
-  );
-  return rows[0] ? mapApprover(rows[0]) : null;
+  const { Approver, ApproverType, Employee } = getModels();
+  const approver = await Approver.findByPk(id, {
+    include: [
+      {
+        model: Employee,
+        as: 'employee',
+        attributes: ['EMP_CODE', 'NAME_ENG', 'INITIALS', 'USERNAME', 'CURRENT_EMAIL'],
+        required: false,
+      },
+      {
+        model: Employee,
+        as: 'updatedByEmployee',
+        attributes: ['EMP_CODE', 'INITIALS', 'USERNAME'],
+        required: false,
+      },
+      {
+        model: ApproverType,
+        as: 'approverType',
+        attributes: ['NAME'],
+        required: false,
+      },
+    ],
+  });
+  return approver ? mapApprover(approver) : null;
 }
 
-async function updateApprover(id, employeeCode, enabled, actorCode) {
-  const database = getDatabase();
-  if (!(await ensureEmployeeExists(employeeCode))) return { kind: 'employee-not-found' };
+async function updateApprover(id, employeeCode, approverTypeId, description, enabled, actorCode) {
+  const { Approver } = getModels();
+  const employee = await findEmployee(employeeCode);
+  if (!employee) return { kind: 'employee-not-found' };
+  const name = validateApproverName(employee);
+  if (name.kind) return name;
+  if (!(await isActiveApproverType(approverTypeId))) return { kind: 'approver-type-not-found' };
   const current = await findApprover(id);
   if (!current) return { kind: 'not-found' };
 
-  const duplicate = await database.query(
-    `SELECT TOP 1 ID
-     FROM APPROVERS
-     WHERE APPROVER_ID = :employeeCode AND ID <> :id AND ENABLED = '1'`,
-    { replacements: { employeeCode, id }, type: QueryTypes.SELECT },
-  );
-  if (duplicate[0]) return { kind: 'duplicate' };
+  const duplicate = await Approver.findOne({
+    where: { APPROVER_ID: employeeCode, ENABLED: true, ID: { [Op.ne]: id } },
+    attributes: ['ID'],
+  });
+  if (duplicate) return { kind: 'duplicate' };
 
-  await database.query(
-    `UPDATE APPROVERS
-     SET APPROVER_ID = :employeeCode,
-         ENABLED = :enabled,
-         UPDATED_BY = :actorCode,
-         UPDATED_DATE = GETDATE()
-     WHERE ID = :id`,
-    { replacements: { id, employeeCode, enabled: enabled ? '1' : '0', actorCode }, type: QueryTypes.UPDATE },
-  );
+  await current.update({
+    NAME: name.name,
+    APPROVER_ID: employeeCode,
+    APPROVER_TYPE_ID: approverTypeId,
+    DESCRIPTION: description,
+    ENABLED: enabled,
+    UPDATED_DATE: Approver.sequelize.fn('GETDATE'),
+    UPDATED_BY: actorCode,
+  });
   return { item: await getApproverById(id) };
 }
 
 async function setActive(id, enabled, actorCode) {
-  const database = getDatabase();
-  const [result] = await database.query(
-    `UPDATE APPROVERS
-     SET ENABLED = :enabled, UPDATED_BY = :actorCode, UPDATED_DATE = GETDATE()
-     WHERE ID = :id`,
-    { replacements: { id, enabled: enabled ? '1' : '0', actorCode }, type: QueryTypes.UPDATE },
+  const { Approver } = getModels();
+  const [affectedCount] = await Approver.update(
+    { ENABLED: enabled, UPDATED_DATE: Approver.sequelize.fn('GETDATE'), UPDATED_BY: actorCode },
+    { where: { ID: id } },
   );
-  return result > 0 ? { item: await getApproverById(id) } : { kind: 'not-found' };
+  return affectedCount > 0 ? { item: await getApproverById(id) } : { kind: 'not-found' };
 }
 
 async function softDelete(id, actorCode) {
   return setActive(id, false, actorCode);
 }
 
-module.exports = { listApprovers, listEmployeeOptions, createApprover, updateApprover, setActive, softDelete };
+module.exports = {
+  listApprovers,
+  listEmployeeOptions,
+  listApproverTypeOptions,
+  createApprover,
+  getApproverById,
+  updateApprover,
+  setActive,
+  softDelete,
+};
