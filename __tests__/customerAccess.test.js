@@ -4,7 +4,7 @@ const customerAccessMiddleware = require('../middlewares/customerAccess');
 describe('customerAccessMiddleware', () => {
   it.each([
     ['System Admin', 'd854d840-d18c-4a7d-87c1-a9186f8664e5'],
-    ['Super Admin', 'fd08992c-08cc-4c39-8f0d-dfcc0cb90663'],
+    ['Super User', 'fd08992c-08cc-4c39-8f0d-dfcc0cb90663'],
   ])('allows the %s role', (role, roleId) => {
     const calls = [];
     const next = (...args) => calls.push(args);
@@ -26,7 +26,7 @@ describe('customerAccessMiddleware', () => {
     expect(error).toMatchObject({
       statusCode: 403,
       code: 'FORBIDDEN',
-      message: 'Only the System Admin or Super Admin role can access Customer Extensions.',
+      message: 'Only the System Admin or Super User role can access Customer Extensions.',
     });
   });
 });

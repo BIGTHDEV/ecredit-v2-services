@@ -21,6 +21,7 @@ async function confirmAction(req, res, next) {
       actorEmail: req.user?.email || config.email.bcc,
       actorName: req.user?.displayName || 'Email action user',
       user: req.user,
+      auditActorCode: data.approverId,
     });
     res.status(200).json({
       success: true,

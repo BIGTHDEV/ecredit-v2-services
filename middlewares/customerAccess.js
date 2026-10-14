@@ -7,7 +7,7 @@ function customerAccessMiddleware(req, res, next) {
     return next();
   }
 
-  const error = new Error('Only the System Admin or Super Admin role can access Customer Extensions.');
+  const error = new Error('Only the System Admin or Super User role can access Customer Extensions.');
   error.statusCode = 403;
   error.code = errorCodes.FORBIDDEN;
   return next(error);

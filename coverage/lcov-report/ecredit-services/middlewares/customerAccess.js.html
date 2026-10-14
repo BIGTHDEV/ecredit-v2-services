@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>10/10</span>
+                <span class='fraction'>0/10</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>2/2</span>
+                <span class='fraction'>0/2</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/1</span>
+                <span class='fraction'>0/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>10/10</span>
+                <span class='fraction'>0/10</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line high'></div>
+    <div class='status-line low'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -79,38 +79,38 @@
 <a name='L14'></a><a href='#L14'>14</a>
 <a name='L15'></a><a href='#L15'>15</a>
 <a name='L16'></a><a href='#L16'>16</a>
-<a name='L17'></a><a href='#L17'>17</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<a name='L17'></a><a href='#L17'>17</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const errorCodes = require('../helpers/errorCodes');
-const { isAdminRole } = require('../helpers/roleAuthorization');
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const errorCodes = <span class="cstat-no" title="statement not covered" >require('../helpers/errorCodes');</span>
+const { isAdminRole } = <span class="cstat-no" title="statement not covered" >require('../helpers/roleAuthorization');</span>
 &nbsp;
-function customerAccessMiddleware(req, res, next) {
-  const profile = req.user?.profile;
-  if (isAdminRole(profile?.ROLE, profile?.ROLE_ID)) {
-    return next();
+function <span class="fstat-no" title="function not covered" >customerAccessMiddleware(</span>req, res, next) {
+  const profile = <span class="cstat-no" title="statement not covered" >req.user?.profile;</span>
+<span class="cstat-no" title="statement not covered" >  if (isAdminRole(profile?.ROLE, profile?.ROLE_ID)) {</span>
+<span class="cstat-no" title="statement not covered" >    return next();</span>
   }
 &nbsp;
-  const error = new Error('Only the System Admin or Super Admin role can access Customer Extensions.');
-  error.statusCode = 403;
-  error.code = errorCodes.FORBIDDEN;
-  return next(error);
+  const error = <span class="cstat-no" title="statement not covered" >new Error('Only the System Admin or Super User role can access Customer Extensions.');</span>
+<span class="cstat-no" title="statement not covered" >  error.statusCode = 403;</span>
+<span class="cstat-no" title="statement not covered" >  error.code = errorCodes.FORBIDDEN;</span>
+<span class="cstat-no" title="statement not covered" >  return next(error);</span>
 }
 &nbsp;
-module.exports = customerAccessMiddleware;
+<span class="cstat-no" title="statement not covered" >module.exports = customerAccessMiddleware;</span>
 &nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -118,7 +118,7 @@ module.exports = customerAccessMiddleware;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-14T08:46:43.626Z
+                at 2026-10-14T15:56:28.979Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

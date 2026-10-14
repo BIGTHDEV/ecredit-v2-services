@@ -4,7 +4,7 @@ const { isAdminRole } = require('../helpers/roleAuthorization');
 function requireAdmin(req) {
   const profile = req.user?.profile;
   if (isAdminRole(profile?.ROLE, profile?.ROLE_ID)) return;
-  const error = new Error('Only the System Admin or Super Admin role can access all event logs.');
+  const error = new Error('Only the System Admin or Super User role can access all event logs.');
   error.statusCode = 403;
   error.code = 'FORBIDDEN';
   throw error;

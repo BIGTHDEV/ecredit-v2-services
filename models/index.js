@@ -20,6 +20,7 @@ const defineApproval = require('./approval');
 const defineApprover = require('./approver');
 const defineApproverType = require('./approverType');
 const defineEmail = require('./email');
+const defineNotification = require('./notification');
 
 /**
  * Sequelize model registry
@@ -51,6 +52,7 @@ function initModels(sequelize) {
   const Approver = defineApprover(sequelize);
   const ApproverType = defineApproverType(sequelize);
   const Email = defineEmail(sequelize);
+  const Notification = defineNotification(sequelize);
 
   // TB1 -> TB2 (USERS.ID = S_EMPLOYEE1.EMP_CODE)
   User.hasOne(Employee, { as: 'employee', foreignKey: 'EMP_CODE', sourceKey: 'ID' });
@@ -131,6 +133,7 @@ function initModels(sequelize) {
     Approver,
     ApproverType,
     Email,
+    Notification,
   };
   return models;
 }
