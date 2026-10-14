@@ -818,7 +818,7 @@ describe('requestService.submitRequest', () => {
     };
     database.query
       .mockResolvedValueOnce([{ ID: 'type-1' }])
-      .mockResolvedValueOnce([{ EMP_CODE: 456 }])
+      .mockResolvedValueOnce([{ EMP_CODE: 456, APPROVER_TYPE_ID: 'type-1' }])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
 
@@ -862,7 +862,7 @@ describe('requestService.submitRequest', () => {
     };
     database.query
       .mockResolvedValueOnce([{ ID: 'type-1' }])
-      .mockResolvedValueOnce([{ EMP_CODE: 456 }])
+      .mockResolvedValueOnce([{ EMP_CODE: 456, APPROVER_TYPE_ID: 'type-1' }])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
 
@@ -892,7 +892,7 @@ describe('requestService.submitRequest', () => {
     }]);
     database.query
       .mockResolvedValueOnce([{ ID: 'type-1' }])
-      .mockResolvedValueOnce([{ EMP_CODE: 456 }])
+      .mockResolvedValueOnce([{ EMP_CODE: 456, APPROVER_TYPE_ID: 'type-1' }])
       .mockResolvedValueOnce([])
       .mockRejectedValueOnce(new Error('insert failed'));
 
@@ -901,5 +901,56 @@ describe('requestService.submitRequest', () => {
 
     expect(transaction.rollback).toHaveBeenCalledTimes(1);
     expect(transaction.commit).not.toHaveBeenCalled();
+  });
+
+  it('rejects an approver who is not configured for the selected approver type', async () => {
+    database.query
+      .mockResolvedValueOnce([{ ID: 'type-1' }])
+      .mockResolvedValueOnce([{ EMP_CODE: 456, APPROVER_TYPE_ID: 'type-2' }])
+      .mockResolvedValueOnce([]);
+
+    await expect(requestService.submitRequest(
+      requestId,
+      submitCommand([{ approverTypeId: 'type-1', approverId: '456', approvalStep: 1, sorting: 1 }]),
+      updatedBy,
+    )).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
+
+    expect(requestRecord.update).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalledTimes(1);
+    expect(transaction.commit).not.toHaveBeenCalled();
+  });
+});
+
+describe('requestService.getApprovalSubmitOptions', () => {
+  let database;
+
+  beforeEach(() => {
+    database = { query: jest.fn() };
+    getDatabase.mockReturnValue(database);
+  });
+
+  it('returns only active approvers assigned to enabled types', async () => {
+    const availableApprover = {
+      ID: 456,
+      NAME: 'AB-Approver',
+      APPROVER_TYPE_ID: 'type-1',
+      PRIMARY: true,
+    };
+    database.query
+      .mockResolvedValueOnce([{ PROPOSED_LIMIT_AMOUNT: 100000 }])
+      .mockResolvedValueOnce([availableApprover])
+      .mockResolvedValueOnce([{ ID: 12345, NAME: 'Submitter' }])
+      .mockResolvedValueOnce([{ ID: 'type-1', NAME: 'Type 1' }])
+      .mockResolvedValueOnce([]);
+
+    const options = await requestService.getApprovalSubmitOptions(requestId);
+
+    expect(options.approvers).toEqual([availableApprover]);
+    expect(options.bdsReviewApprovers).toEqual([{ ID: 12345, NAME: 'Submitter' }]);
+    expect(database.query.mock.calls[1][0]).toContain('FROM APPROVERS AS TB1');
+    expect(database.query.mock.calls[1][0]).toContain("TB1.ENABLED = '1'");
+    expect(database.query.mock.calls[1][0]).toContain("TB2.ENABLED = '1'");
+    expect(database.query.mock.calls[1][0]).toContain("TB3.WORK_STATUS = '3'");
+    expect(database.query.mock.calls[1][0]).toContain('TB1.[PRIMARY] AS [PRIMARY]');
   });
 });

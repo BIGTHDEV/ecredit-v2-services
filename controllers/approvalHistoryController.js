@@ -1,4 +1,5 @@
 const requestService = require('../services/requestService');
+const salesforceUpdateSimulationService = require('../services/salesforceUpdateSimulationService');
 const { notifyBestEffort } = require('../services/requestWorkflowNotificationService');
 const { isSystemAdminRole } = require('../helpers/roleAuthorization');
 const { effectiveEmployeeCode, approvalAuditEmployeeCode } = require('../helpers/userIdentity');
@@ -9,7 +10,9 @@ const COMPLETED_STATUS_ID = '407e23f9-caf5-4c4a-801d-598cf437d1ae';
 async function listApprovalHistory(req, res, next) {
   try {
     const correlationId = res.locals.correlationId || 'N/A';
-    const data = await requestService.listApprovalHistory(req.params.requestId);
+    const includeDisabledApprovals = req.query.includeDisabledApprovals === 'true'
+      && isSystemAdminRole(req.user?.profile?.ROLE, req.user?.profile?.ROLE_ID);
+    const data = await requestService.listApprovalHistory(req.params.requestId, { includeDisabledApprovals });
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.status(200).json({ success: true, data, correlationId });
   } catch (error) {
@@ -110,4 +113,111 @@ async function processApprovalAction(req, res, next) {
   }
 }
 
-module.exports = { listApprovalHistory, getApprovalSubmitOptions, submitRequest, processApprovalAction };
+async function changeRequestStatus(req, res, next) {
+  try {
+    const correlationId = res.locals.correlationId || 'N/A';
+    const isSystemAdmin = isSystemAdminRole(req.user?.profile?.ROLE, req.user?.profile?.ROLE_ID);
+    if (!isSystemAdmin) {
+      const error = new Error('Only System Admin can change request status.');
+      error.statusCode = 403;
+      error.code = 'FORBIDDEN';
+      throw error;
+    }
+
+    const updatedBy = effectiveEmployeeCode(req.user?.profile);
+    if (!Number.isInteger(updatedBy)) {
+      const error = new Error('Authenticated user profile is missing a numeric employee code.');
+      error.statusCode = 403;
+      error.code = 'FORBIDDEN';
+      throw error;
+    }
+
+    const {
+      statusId,
+      updateApprovers = false,
+      approveAllApprovers = false,
+      description,
+      updateSalesforce = false,
+      crmPayload,
+    } = req.body ?? {};
+    if (typeof description !== 'string' || !description.trim()) {
+      const error = new Error('A reason is required to change request status.');
+      error.statusCode = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+    if (description.trim().length > 2000) {
+      const error = new Error('The status change reason must not exceed 2000 characters.');
+      error.statusCode = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+    req.body.description = description.trim();
+
+    if (typeof updateApprovers !== 'boolean') {
+      const error = new Error('updateApprovers must be a boolean.');
+      error.statusCode = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+    if (typeof approveAllApprovers !== 'boolean') {
+      const error = new Error('approveAllApprovers must be a boolean.');
+      error.statusCode = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+    if (typeof updateSalesforce !== 'boolean') {
+      const error = new Error('updateSalesforce must be a boolean.');
+      error.statusCode = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+    if (updateSalesforce && statusId !== COMPLETED_STATUS_ID) {
+      const error = new Error('Salesforce updates are only available when completing a request.');
+      error.statusCode = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+    if (updateSalesforce && (!crmPayload || typeof crmPayload !== 'object' || Array.isArray(crmPayload))) {
+      const error = new Error('A request payload is required for the Salesforce simulation.');
+      error.statusCode = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+
+    const request = await requestService.changeRequestStatus(
+      req.params.id,
+      statusId,
+      updatedBy,
+      updateApprovers,
+      approveAllApprovers,
+    );
+    if (!request) {
+      const error = new Error(`Request ${req.params.id} was not found.`);
+      error.statusCode = 404;
+      error.code = 'RESOURCE_NOT_FOUND';
+      throw error;
+    }
+
+    let crmSimulation = null;
+    if (updateSalesforce) {
+      crmSimulation = await salesforceUpdateSimulationService.simulateRequestUpdate(crmPayload);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { request, crmSimulation },
+      correlationId,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = {
+  listApprovalHistory,
+  getApprovalSubmitOptions,
+  submitRequest,
+  processApprovalAction,
+  changeRequestStatus,
+};

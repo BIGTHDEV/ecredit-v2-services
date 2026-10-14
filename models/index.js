@@ -95,6 +95,7 @@ function initModels(sequelize) {
   Customer.belongsTo(Employee, { as: 'updatedByEmployee', foreignKey: 'UPDATED_BY', targetKey: 'EMP_CODE' });
 
   Log.belongsTo(Employee, { as: 'updatedByEmployee', foreignKey: 'UPDATED_BY', targetKey: 'EMP_CODE' });
+  Log.belongsTo(Request, { as: 'request', foreignKey: 'REQUEST_ID', targetKey: 'ID' });
   CustomerLog.belongsTo(Employee, { as: 'createdByEmployee', foreignKey: 'CREATED_BY', targetKey: 'EMP_CODE' });
   CustomerLog.belongsTo(LogType, { as: 'logType', foreignKey: 'LOG_TYPE_ID', targetKey: 'ID' });
   Email.belongsTo(Employee, { as: 'updatedByEmployee', foreignKey: 'UPDATED_BY', targetKey: 'EMP_CODE' });

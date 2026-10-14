@@ -8,6 +8,7 @@ const SORT_FIELDS = {
   APPROVER_TYPE: 'NAME',
   DESCRIPTION: 'DESCRIPTION',
   EMAIL: 'CURRENT_EMAIL',
+  PRIMARY: 'PRIMARY',
   UPDATED_DATE: 'UPDATED_DATE',
   ACTIVE: 'ENABLED',
 };
@@ -57,6 +58,7 @@ function mapApprover(approver) {
     UPDATED_DATE: formatUpdatedDate(approver.UPDATED_DATE),
     UPDATED_BY: formatEmployeeName(approver.updatedByEmployee),
     ACTIVE: isEnabled(approver.ENABLED),
+    PRIMARY: isEnabled(approver.ENABLED) && isEnabled(approver.PRIMARY),
   };
 }
 
@@ -67,6 +69,7 @@ function buildApproverWhere(query) {
   const updatedBy = typeof query.UPDATED_BY === 'string' ? query.UPDATED_BY.trim() : '';
   const updatedDate = typeof query.UPDATED_DATE === 'string' ? query.UPDATED_DATE.trim() : '';
   const active = typeof query.ACTIVE === 'string' ? query.ACTIVE.trim().toLowerCase() : '';
+  const primary = typeof query.PRIMARY === 'string' ? query.PRIMARY.trim().toLowerCase() : '';
 
   if (code) filters.push(where(cast(col('APPROVER_ID'), 'NVARCHAR'), { [Op.like]: `%${code}%` }));
   if (description) filters.push({ DESCRIPTION: { [Op.like]: `%${description}%` } });
@@ -80,6 +83,8 @@ function buildApproverWhere(query) {
   }
   if (active === 'active' || active === 'true') filters.push({ ENABLED: true });
   if (active === 'inactive' || active === 'false') filters.push({ ENABLED: false });
+  if (primary === 'primary' || primary === 'true' || primary === '1') filters.push({ PRIMARY: true, ENABLED: true });
+  if (primary === 'not primary' || primary === 'false' || primary === '0') filters.push({ PRIMARY: false });
 
   return filters.length ? { [Op.and]: filters } : undefined;
 }
@@ -152,7 +157,7 @@ async function listApprovers(query = {}) {
     order: buildOrder(query.sort, query.dir, Employee, ApproverType),
     offset: (page - 1) * pageSize,
     limit: pageSize,
-    attributes: ['ID', 'APPROVER_ID', 'APPROVER_TYPE_ID', 'NAME', 'DESCRIPTION', 'ENABLED', 'UPDATED_DATE', 'UPDATED_BY'],
+    attributes: ['ID', 'APPROVER_ID', 'APPROVER_TYPE_ID', 'NAME', 'DESCRIPTION', 'PRIMARY', 'ENABLED', 'UPDATED_DATE', 'UPDATED_BY'],
   });
   const totalItems = Number(result.count);
 
@@ -223,7 +228,26 @@ function validateApproverName(employee) {
   return name.length <= APPROVER_NAME_MAX_LENGTH ? { name } : { kind: 'employee-name-too-long' };
 }
 
-async function createApprover(employeeCode, approverTypeId, description, enabled, actorCode) {
+async function setPrimaryInType(Approver, id, approverTypeId, actorCode, transaction) {
+  await Approver.update(
+    { PRIMARY: false },
+    { where: { APPROVER_TYPE_ID: approverTypeId, ENABLED: true }, transaction },
+  );
+  const [affectedCount] = await Approver.update(
+    {
+      PRIMARY: true,
+      UPDATED_DATE: Approver.sequelize.fn('GETDATE'),
+      UPDATED_BY: actorCode,
+    },
+    {
+      where: { ID: id, APPROVER_TYPE_ID: approverTypeId, ENABLED: true },
+      transaction,
+    },
+  );
+  return affectedCount > 0;
+}
+
+async function createApprover(employeeCode, approverTypeId, description, enabled, actorCode, primary = false) {
   const { Approver } = getModels();
   const employee = await findEmployee(employeeCode);
   if (!employee) return { kind: 'employee-not-found' };
@@ -238,19 +262,37 @@ async function createApprover(employeeCode, approverTypeId, description, enabled
   if (existing) return { kind: 'duplicate' };
 
   const id = randomUUID();
-  await Approver.create({
+  const values = {
     ID: id,
     NAME: name.name,
     APPROVER_ID: employeeCode,
     APPROVER_TYPE_ID: approverTypeId,
     DESCRIPTION: description,
+    PRIMARY: false,
     ENABLED: enabled,
     SORTING: null,
     CREATED_DATE: Approver.sequelize.fn('GETDATE'),
     CREATED_BY: actorCode,
     UPDATED_DATE: Approver.sequelize.fn('GETDATE'),
     UPDATED_BY: actorCode,
-  });
+  };
+  if (enabled && primary) {
+    const transaction = await Approver.sequelize.transaction();
+    try {
+      await Approver.create(values, { transaction });
+      const selected = await setPrimaryInType(Approver, id, approverTypeId, actorCode, transaction);
+      if (!selected) {
+        await transaction.rollback();
+        return { kind: 'inactive' };
+      }
+      await transaction.commit();
+    } catch (error) {
+      if (!transaction.finished) await transaction.rollback();
+      throw error;
+    }
+  } else {
+    await Approver.create(values);
+  }
   return { item: await getApproverById(id) };
 }
 
@@ -281,7 +323,7 @@ async function getApproverById(id) {
   return approver ? mapApprover(approver) : null;
 }
 
-async function updateApprover(id, employeeCode, approverTypeId, description, enabled, actorCode) {
+async function updateApprover(id, employeeCode, approverTypeId, description, enabled, actorCode, primary) {
   const { Approver } = getModels();
   const employee = await findEmployee(employeeCode);
   if (!employee) return { kind: 'employee-not-found' };
@@ -297,25 +339,102 @@ async function updateApprover(id, employeeCode, approverTypeId, description, ena
   });
   if (duplicate) return { kind: 'duplicate' };
 
-  await current.update({
+  const preservePrimary = primary === undefined && enabled
+    && isEnabled(current.ENABLED)
+    && isEnabled(current.PRIMARY)
+    && String(current.APPROVER_TYPE_ID) === String(approverTypeId);
+  const shouldBePrimary = enabled && (primary === true || preservePrimary);
+  const values = {
     NAME: name.name,
     APPROVER_ID: employeeCode,
     APPROVER_TYPE_ID: approverTypeId,
     DESCRIPTION: description,
+    PRIMARY: false,
     ENABLED: enabled,
     UPDATED_DATE: Approver.sequelize.fn('GETDATE'),
     UPDATED_BY: actorCode,
-  });
+  };
+  if (shouldBePrimary) {
+    const transaction = await Approver.sequelize.transaction();
+    try {
+      await current.update(values, { transaction });
+      const selected = await setPrimaryInType(Approver, id, approverTypeId, actorCode, transaction);
+      if (!selected) {
+        await transaction.rollback();
+        return { kind: 'inactive' };
+      }
+      await transaction.commit();
+    } catch (error) {
+      if (!transaction.finished) await transaction.rollback();
+      throw error;
+    }
+  } else {
+    await current.update(values);
+  }
   return { item: await getApproverById(id) };
 }
 
 async function setActive(id, enabled, actorCode) {
   const { Approver } = getModels();
   const [affectedCount] = await Approver.update(
-    { ENABLED: enabled, UPDATED_DATE: Approver.sequelize.fn('GETDATE'), UPDATED_BY: actorCode },
+    {
+      ENABLED: enabled,
+      PRIMARY: false,
+      UPDATED_DATE: Approver.sequelize.fn('GETDATE'),
+      UPDATED_BY: actorCode,
+    },
     { where: { ID: id } },
   );
   return affectedCount > 0 ? { item: await getApproverById(id) } : { kind: 'not-found' };
+}
+
+async function setPrimary(id, actorCode, primary = true) {
+  const { Approver } = getModels();
+  const transaction = await Approver.sequelize.transaction();
+  try {
+    const current = await Approver.findByPk(id, { transaction });
+    if (!current) {
+      await transaction.rollback();
+      return { kind: 'not-found' };
+    }
+    if (!isEnabled(current.ENABLED)) {
+      await transaction.rollback();
+      return { kind: 'inactive' };
+    }
+
+    let updated;
+    if (primary) {
+      updated = await setPrimaryInType(
+        Approver,
+        id,
+        current.APPROVER_TYPE_ID,
+        actorCode,
+        transaction,
+      );
+    } else {
+      const [affectedCount] = await Approver.update(
+        {
+          PRIMARY: false,
+          UPDATED_DATE: Approver.sequelize.fn('GETDATE'),
+          UPDATED_BY: actorCode,
+        },
+        {
+          where: { ID: id, APPROVER_TYPE_ID: current.APPROVER_TYPE_ID, ENABLED: true },
+          transaction,
+        },
+      );
+      updated = affectedCount > 0;
+    }
+    if (!updated) {
+      await transaction.rollback();
+      return { kind: 'inactive' };
+    }
+    await transaction.commit();
+    return { item: await getApproverById(id) };
+  } catch (error) {
+    if (!transaction.finished) await transaction.rollback();
+    throw error;
+  }
 }
 
 async function softDelete(id, actorCode) {
@@ -330,5 +449,6 @@ module.exports = {
   getApproverById,
   updateApprover,
   setActive,
+  setPrimary,
   softDelete,
 };

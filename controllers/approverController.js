@@ -39,16 +39,26 @@ function parsePayload(body) {
   if (!employeeCode) throw validationError('employeeCode is required.');
   if (!approverTypeId) throw validationError('approverTypeId is required.');
   if (typeof body?.enabled !== 'boolean') throw validationError('enabled must be a boolean.');
+  if (body?.primary !== undefined && typeof body.primary !== 'boolean') {
+    throw validationError('primary must be a boolean.');
+  }
   if (body?.description != null && typeof body.description !== 'string') {
     throw validationError('description must be a string.');
   }
-  return { employeeCode, approverTypeId, description: body?.description?.trim() || '', enabled: body.enabled };
+  return {
+    employeeCode,
+    approverTypeId,
+    description: body?.description?.trim() || '',
+    enabled: body.enabled,
+    primary: body.primary,
+  };
 }
 
 function sendResult(res, result, resourceName) {
   if (result.kind === 'employee-not-found') throw validationError('The selected employee was not found.');
   if (result.kind === 'employee-name-too-long') throw validationError('The selected employee name exceeds the 50 character limit.');
   if (result.kind === 'approver-type-not-found') throw validationError('The selected approver type is unavailable.');
+  if (result.kind === 'inactive') throw validationError('Only active approvers can be set as primary.');
   if (result.kind === 'duplicate') throw validationError('This employee is already assigned as an approver.');
   if (result.kind === 'not-found') {
     const error = new Error(`${resourceName} was not found.`);
@@ -99,7 +109,14 @@ async function create(req, res, next) {
     requireSystemAdmin(req);
     const payload = parsePayload(req.body);
     const updatedBy = requireActorCode(req);
-    const result = await approverService.createApprover(payload.employeeCode, payload.approverTypeId, payload.description, payload.enabled, updatedBy);
+    const result = await approverService.createApprover(
+      payload.employeeCode,
+      payload.approverTypeId,
+      payload.description,
+      payload.enabled,
+      updatedBy,
+      payload.primary,
+    );
     return sendResult(res, result, 'Approver');
   } catch (error) { return next(error); }
 }
@@ -109,7 +126,15 @@ async function update(req, res, next) {
     requireSystemAdmin(req);
     const payload = parsePayload(req.body);
     const updatedBy = requireActorCode(req);
-    const result = await approverService.updateApprover(req.params.id, payload.employeeCode, payload.approverTypeId, payload.description, payload.enabled, updatedBy);
+    const result = await approverService.updateApprover(
+      req.params.id,
+      payload.employeeCode,
+      payload.approverTypeId,
+      payload.description,
+      payload.enabled,
+      updatedBy,
+      payload.primary,
+    );
     return sendResult(res, result, 'Approver');
   } catch (error) { return next(error); }
 }
@@ -124,6 +149,18 @@ async function setActive(req, res, next) {
   } catch (error) { return next(error); }
 }
 
+async function setPrimary(req, res, next) {
+  try {
+    requireSystemAdmin(req);
+    if (req.body?.primary !== undefined && typeof req.body.primary !== 'boolean') {
+      throw validationError('primary must be a boolean.');
+    }
+    const updatedBy = requireActorCode(req);
+    const result = await approverService.setPrimary(req.params.id, updatedBy, req.body?.primary ?? true);
+    return sendResult(res, result, 'Approver');
+  } catch (error) { return next(error); }
+}
+
 async function remove(req, res, next) {
   try {
     requireSystemAdmin(req);
@@ -133,4 +170,4 @@ async function remove(req, res, next) {
   } catch (error) { return next(error); }
 }
 
-module.exports = { list, get, employeeOptions, approverTypeOptions, create, update, setActive, remove };
+module.exports = { list, get, employeeOptions, approverTypeOptions, create, update, setActive, setPrimary, remove };

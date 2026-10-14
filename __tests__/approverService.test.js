@@ -15,6 +15,7 @@ describe('approverService', () => {
         APPROVER_ID: 123,
         APPROVER_TYPE_ID: 'type-id',
         DESCRIPTION: 'Finance',
+        PRIMARY: true,
         ENABLED: true,
         UPDATED_DATE: new Date('2026-10-12T10:29:00.000Z'),
         UPDATED_BY: 456,
@@ -42,10 +43,13 @@ describe('approverService', () => {
       DESCRIPTION: 'Finance',
       EMAIL: 'example@',
       UPDATED_BY: 'NUC-nuttapongc',
+      PRIMARY: 'primary',
     });
 
     expect(findAndCountAll).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ [Op.and]: expect.any(Array) }),
+      where: expect.objectContaining({
+        [Op.and]: expect.arrayContaining([{ PRIMARY: true, ENABLED: true }]),
+      }),
       include: expect.arrayContaining([expect.objectContaining({
         model: Employee,
         as: 'employee',
@@ -79,6 +83,7 @@ describe('approverService', () => {
         UPDATED_DATE: '12 Oct 2026 10:29 AM',
         UPDATED_BY: 'NUC-nuttapongc',
         ACTIVE: true,
+        PRIMARY: true,
       }],
       pagination: { page: 2, pageSize: 10, totalItems: 1, totalPages: 1 },
     });
@@ -124,6 +129,7 @@ describe('approverService', () => {
       APPROVER_ID: 123,
       APPROVER_TYPE_ID: 'type-id',
       DESCRIPTION: 'Finance',
+      PRIMARY: false,
       ENABLED: true,
       employee: { NAME_ENG: 'Example Employee', INITIALS: 'EX', USERNAME: 'example', CURRENT_EMAIL: 'example@example.com' },
     };
@@ -153,12 +159,65 @@ describe('approverService', () => {
     expect(result.item).toMatchObject({ DESCRIPTION: 'Finance', CODE: '123', ACTIVE: true });
   });
 
+  it('creates a primary approver after clearing the active type group in a transaction', async () => {
+    const transaction = {
+      finished: null,
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+    };
+    const created = {
+      ID: 'approver-id',
+      APPROVER_ID: 123,
+      APPROVER_TYPE_ID: 'type-id',
+      DESCRIPTION: 'Finance',
+      PRIMARY: true,
+      ENABLED: true,
+      employee: { NAME_ENG: 'Example Employee', CURRENT_EMAIL: 'example@example.com' },
+      approverType: { NAME: 'Finance' },
+    };
+    const create = jest.fn().mockResolvedValue(undefined);
+    const update = jest.fn().mockResolvedValue([1]);
+    const findByPk = jest.fn().mockResolvedValue(created);
+    const sequelize = {
+      fn: jest.fn().mockReturnValue('GETDATE()'),
+      transaction: jest.fn().mockResolvedValue(transaction),
+    };
+    getModels.mockReturnValue({
+      Approver: { findOne: jest.fn().mockResolvedValue(null), create, update, findByPk, sequelize },
+      ApproverType: { findOne: jest.fn().mockResolvedValue({ ID: 'type-id' }) },
+      Employee: { findByPk: jest.fn().mockResolvedValue({ EMP_CODE: 123, NAME_ENG: 'Example Employee' }) },
+    });
+
+    const result = await approverService.createApprover('123', 'type-id', 'Finance', true, 789, true);
+
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      APPROVER_TYPE_ID: 'type-id',
+      PRIMARY: false,
+      ENABLED: true,
+    }), { transaction });
+    expect(update).toHaveBeenNthCalledWith(1, { PRIMARY: false }, {
+      where: { APPROVER_TYPE_ID: 'type-id', ENABLED: true },
+      transaction,
+    });
+    expect(update).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      PRIMARY: true,
+      UPDATED_BY: 789,
+    }), {
+      where: { ID: expect.any(String), APPROVER_TYPE_ID: 'type-id', ENABLED: true },
+      transaction,
+    });
+    expect(transaction.commit).toHaveBeenCalledTimes(1);
+    expect(transaction.rollback).not.toHaveBeenCalled();
+    expect(result.item).toMatchObject({ PRIMARY: true, ACTIVE: true });
+  });
+
   it('updates approver details and soft-deletes through ORM associations', async () => {
     const updated = {
       ID: 'approver-id',
       APPROVER_ID: 123,
       APPROVER_TYPE_ID: 'type-id',
       DESCRIPTION: 'Updated description',
+      PRIMARY: true,
       ENABLED: false,
       employee: { NAME_ENG: 'Example Employee', INITIALS: 'EX', USERNAME: 'example', CURRENT_EMAIL: 'example@example.com' },
     };
@@ -185,6 +244,7 @@ describe('approverService', () => {
       APPROVER_ID: '123',
       APPROVER_TYPE_ID: 'type-id',
       DESCRIPTION: 'Updated description',
+      PRIMARY: false,
       ENABLED: false,
       UPDATED_DATE: 'GETDATE()',
       UPDATED_BY: 789,
@@ -193,10 +253,69 @@ describe('approverService', () => {
 
     const deleted = await approverService.softDelete('approver-id', 789);
     expect(approverUpdate).toHaveBeenCalledWith(
-      { ENABLED: false, UPDATED_DATE: 'GETDATE()', UPDATED_BY: 789 },
+      { ENABLED: false, PRIMARY: false, UPDATED_DATE: 'GETDATE()', UPDATED_BY: 789 },
       { where: { ID: 'approver-id' } },
     );
     expect(deleted.item).toMatchObject({ ID: 'approver-id', ACTIVE: false });
+  });
+
+  it('updates an approver to primary while clearing the active members in its selected type', async () => {
+    const transaction = {
+      finished: null,
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+    };
+    const updated = {
+      ID: 'approver-id',
+      APPROVER_ID: 123,
+      APPROVER_TYPE_ID: 'type-id',
+      DESCRIPTION: 'Finance',
+      PRIMARY: true,
+      ENABLED: true,
+      employee: { NAME_ENG: 'Example Employee', CURRENT_EMAIL: 'example@example.com' },
+      approverType: { NAME: 'Finance' },
+    };
+    const updateCurrent = jest.fn().mockResolvedValue(undefined);
+    const update = jest.fn().mockResolvedValue([1]);
+    const findByPk = jest.fn()
+      .mockResolvedValueOnce({
+        ID: 'approver-id',
+        APPROVER_TYPE_ID: 'type-id',
+        ENABLED: true,
+        PRIMARY: false,
+        update: updateCurrent,
+      })
+      .mockResolvedValueOnce(updated);
+    const sequelize = {
+      fn: jest.fn().mockReturnValue('GETDATE()'),
+      transaction: jest.fn().mockResolvedValue(transaction),
+    };
+    getModels.mockReturnValue({
+      Approver: { findByPk, findOne: jest.fn().mockResolvedValue(null), update, sequelize },
+      ApproverType: { findOne: jest.fn().mockResolvedValue({ ID: 'type-id' }) },
+      Employee: { findByPk: jest.fn().mockResolvedValue({ EMP_CODE: 123, NAME_ENG: 'Example Employee' }) },
+    });
+
+    const result = await approverService.updateApprover('approver-id', '123', 'type-id', 'Finance', true, 789, true);
+
+    expect(updateCurrent).toHaveBeenCalledWith(expect.objectContaining({
+      APPROVER_TYPE_ID: 'type-id',
+      PRIMARY: false,
+      ENABLED: true,
+    }), { transaction });
+    expect(update).toHaveBeenNthCalledWith(1, { PRIMARY: false }, {
+      where: { APPROVER_TYPE_ID: 'type-id', ENABLED: true },
+      transaction,
+    });
+    expect(update).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      PRIMARY: true,
+      UPDATED_BY: 789,
+    }), {
+      where: { ID: 'approver-id', APPROVER_TYPE_ID: 'type-id', ENABLED: true },
+      transaction,
+    });
+    expect(transaction.commit).toHaveBeenCalledTimes(1);
+    expect(result.item).toMatchObject({ PRIMARY: true, ACTIVE: true });
   });
 
   it('persists the active toggle as a bit value and returns the updated approver', async () => {
@@ -219,9 +338,129 @@ describe('approverService', () => {
     const result = await approverService.setActive('approver-id', true, 789);
 
     expect(update).toHaveBeenCalledWith(
-      { ENABLED: true, UPDATED_DATE: 'GETDATE()', UPDATED_BY: 789 },
+      { ENABLED: true, PRIMARY: false, UPDATED_DATE: 'GETDATE()', UPDATED_BY: 789 },
       { where: { ID: 'approver-id' } },
     );
     expect(result.item).toMatchObject({ ID: 'approver-id', ACTIVE: true });
+  });
+
+  it('sets the selected active approver as the only primary in its active type', async () => {
+    const transaction = {
+      LOCK: { UPDATE: 'UPDATE' },
+      finished: null,
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+    };
+    const current = {
+      ID: 'approver-id',
+      APPROVER_TYPE_ID: 'type-id',
+      ENABLED: true,
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    const updated = {
+      ID: 'approver-id',
+      APPROVER_ID: 123,
+      APPROVER_TYPE_ID: 'type-id',
+      DESCRIPTION: 'Finance',
+      PRIMARY: true,
+      ENABLED: true,
+      employee: { NAME_ENG: 'Example Employee', CURRENT_EMAIL: 'example@example.com' },
+      approverType: { NAME: 'Finance' },
+    };
+    const update = jest.fn().mockResolvedValue([1]);
+    const findByPk = jest.fn().mockResolvedValueOnce(current).mockResolvedValueOnce(updated);
+    const sequelize = {
+      fn: jest.fn().mockReturnValue('GETDATE()'),
+      transaction: jest.fn().mockResolvedValue(transaction),
+    };
+    getModels.mockReturnValue({
+      Approver: { findByPk, update, sequelize },
+      ApproverType: {},
+      Employee: {},
+    });
+
+    const result = await approverService.setPrimary('approver-id', 789);
+
+    expect(findByPk).toHaveBeenNthCalledWith(1, 'approver-id', { transaction });
+    expect(update).toHaveBeenNthCalledWith(1,
+      { PRIMARY: false },
+      { where: { APPROVER_TYPE_ID: 'type-id', ENABLED: true }, transaction },
+    );
+    expect(update).toHaveBeenNthCalledWith(2,
+      { PRIMARY: true, UPDATED_DATE: 'GETDATE()', UPDATED_BY: 789 },
+      { where: { ID: 'approver-id', APPROVER_TYPE_ID: 'type-id', ENABLED: true }, transaction },
+    );
+    expect(transaction.commit).toHaveBeenCalledTimes(1);
+    expect(transaction.rollback).not.toHaveBeenCalled();
+    expect(result.item).toMatchObject({ ID: 'approver-id', PRIMARY: true });
+  });
+
+  it('does not set an inactive approver as primary', async () => {
+    const transaction = {
+      LOCK: { UPDATE: 'UPDATE' },
+      finished: null,
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+    };
+    const update = jest.fn();
+    getModels.mockReturnValue({
+      Approver: {
+        findByPk: jest.fn().mockResolvedValue({
+          ID: 'approver-id',
+          APPROVER_TYPE_ID: 'type-id',
+          ENABLED: false,
+        }),
+        update,
+        sequelize: { transaction: jest.fn().mockResolvedValue(transaction) },
+      },
+    });
+
+    await expect(approverService.setPrimary('approver-id', 789)).resolves.toEqual({ kind: 'inactive' });
+    expect(update).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalledTimes(1);
+    expect(transaction.commit).not.toHaveBeenCalled();
+  });
+
+  it('clears primary only from the selected active approver when switched off', async () => {
+    const transaction = {
+      finished: null,
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+    };
+    const current = {
+      ID: 'approver-id',
+      APPROVER_TYPE_ID: 'type-id',
+      ENABLED: true,
+    };
+    const updated = {
+      ID: 'approver-id',
+      APPROVER_ID: 123,
+      APPROVER_TYPE_ID: 'type-id',
+      DESCRIPTION: 'Finance',
+      PRIMARY: false,
+      ENABLED: true,
+      employee: { NAME_ENG: 'Example Employee', CURRENT_EMAIL: 'example@example.com' },
+      approverType: { NAME: 'Finance' },
+    };
+    const update = jest.fn().mockResolvedValue([1]);
+    const findByPk = jest.fn().mockResolvedValueOnce(current).mockResolvedValueOnce(updated);
+    const sequelize = {
+      fn: jest.fn().mockReturnValue('GETDATE()'),
+      transaction: jest.fn().mockResolvedValue(transaction),
+    };
+    getModels.mockReturnValue({ Approver: { findByPk, update, sequelize }, ApproverType: {}, Employee: {} });
+
+    const result = await approverService.setPrimary('approver-id', 789, false);
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      PRIMARY: false,
+      UPDATED_BY: 789,
+    }), {
+      where: { ID: 'approver-id', APPROVER_TYPE_ID: 'type-id', ENABLED: true },
+      transaction,
+    });
+    expect(transaction.commit).toHaveBeenCalledTimes(1);
+    expect(transaction.rollback).not.toHaveBeenCalled();
+    expect(result.item).toMatchObject({ ID: 'approver-id', PRIMARY: false });
   });
 });

@@ -16,6 +16,8 @@ router.get('/', authenticationMiddleware, requestController.listRequests);
 router.get('/statuses', authenticationMiddleware, requestMetadataController.listEnabledStatuses);
 router.get('/log-types', authenticationMiddleware, requestMetadataController.listEnabledLogTypes);
 router.get('/ratings', authenticationMiddleware, requestMetadataController.listEnabledRatings);
+router.get('/event-logs', authenticationMiddleware, eventLogController.listAllEvents);
+router.get('/event-logs/:logId', authenticationMiddleware, eventLogController.getAllEvent);
 router.get('/:requestId/event-logs', authenticationMiddleware, eventLogController.listRequestEvents);
 router.get('/:requestId/event-logs/:logId', authenticationMiddleware, eventLogController.getRequestEvent);
 router.get('/:requestId/emails', authenticationMiddleware, emailController.listRequestEmails);
@@ -33,6 +35,7 @@ router.patch('/:id/customer-info', authenticationMiddleware, requestController.u
 router.patch('/:id/scoring-payment', authenticationMiddleware, updateRequestScoringAndPayment);
 router.post('/:id/clone-data', authenticationMiddleware, cloneRequestData);
 router.patch('/:id/cancel', authenticationMiddleware, requestController.cancelRequest);
+router.patch('/:id/status', authenticationMiddleware, approvalHistoryController.changeRequestStatus);
 router.post('/:id/approval-action', authenticationMiddleware, approvalHistoryController.processApprovalAction);
 router.post('/:id/submit', authenticationMiddleware, approvalHistoryController.submitRequest);
 

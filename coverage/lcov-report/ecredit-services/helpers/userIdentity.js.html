@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">84.61% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/13</span>
+                <span class='fraction'>11/13</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">55.55% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/18</span>
+                <span class='fraction'>10/18</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/5</span>
+                <span class='fraction'>5/5</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/11</span>
+                <span class='fraction'>11/11</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -96,66 +96,66 @@
 <a name='L31'></a><a href='#L31'>31</a>
 <a name='L32'></a><a href='#L32'>32</a>
 <a name='L33'></a><a href='#L33'>33</a>
-<a name='L34'></a><a href='#L34'>34</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L34'></a><a href='#L34'>34</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">26x</span>
+<span class="cline-any cline-yes">26x</span>
+<span class="cline-any cline-yes">26x</span>
+<span class="cline-any cline-yes">26x</span>
+<span class="cline-any cline-yes">26x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">19x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { isSystemAdminRole } = <span class="cstat-no" title="statement not covered" >require('./roleAuthorization');</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { isSystemAdminRole } = require('./roleAuthorization');
 &nbsp;
-function <span class="fstat-no" title="function not covered" >employeeCode(</span>value) {
-<span class="cstat-no" title="statement not covered" >  if (value === null || value === undefined || value === '') <span class="cstat-no" title="statement not covered" >return null;</span></span>
-  const normalized = <span class="cstat-no" title="statement not covered" >typeof value === 'string' ? value.trim() : value;</span>
-<span class="cstat-no" title="statement not covered" >  if (normalized === '') <span class="cstat-no" title="statement not covered" >return null;</span></span>
-  const code = <span class="cstat-no" title="statement not covered" >Number(normalized);</span>
-<span class="cstat-no" title="statement not covered" >  return Number.isSafeInteger(code) ? code : null;</span>
+function employeeCode(value) {
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (value === null || value === undefined || value === '') <span class="cstat-no" title="statement not covered" >return null;</span>
+  const normalized = typeof value === 'string' ? value.trim() : <span class="branch-1 cbranch-no" title="branch not covered" >value;</span>
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (normalized === '') <span class="cstat-no" title="statement not covered" >return null;</span>
+  const code = Number(normalized);
+  return Number.isSafeInteger(code) ? code : <span class="branch-1 cbranch-no" title="branch not covered" >null;</span>
 }
 &nbsp;
-function <span class="fstat-no" title="function not covered" >effectiveEmployeeCode(</span>profile) {
-<span class="cstat-no" title="statement not covered" >  return employeeCode(profile?.EFFECTIVE_CODE || profile?.CODE);</span>
+function effectiveEmployeeCode(profile) {
+  return employeeCode(profile?.EFFECTIVE_CODE || <span class="branch-1 cbranch-no" title="branch not covered" >profile?.CODE)</span>;
 }
 &nbsp;
-function <span class="fstat-no" title="function not covered" >mainEmployeeCode(</span>profile) {
-<span class="cstat-no" title="statement not covered" >  return employeeCode(profile?.LOGGED_IN_CODE || profile?.MAIN_CODE || profile?.CODE);</span>
+function mainEmployeeCode(profile) {
+  return employeeCode(profile?.LOGGED_IN_CODE || <span class="branch-1 cbranch-no" title="branch not covered" >profile?.MAIN_CODE </span>|| <span class="branch-2 cbranch-no" title="branch not covered" >profile?.CODE)</span>;
 }
 &nbsp;
-function <span class="fstat-no" title="function not covered" >isMainSystemAdmin(</span>profile) {
-<span class="cstat-no" title="statement not covered" >  return isSystemAdminRole(profile?.LOGGED_IN_ROLE, profile?.LOGGED_IN_ROLE_ID);</span>
+function isMainSystemAdmin(profile) {
+  return isSystemAdminRole(profile?.LOGGED_IN_ROLE, profile?.LOGGED_IN_ROLE_ID);
 }
 &nbsp;
-function <span class="fstat-no" title="function not covered" >approvalAuditEmployeeCode(</span>profile) {
-<span class="cstat-no" title="statement not covered" >  return isMainSystemAdmin(profile) ? mainEmployeeCode(profile) : effectiveEmployeeCode(profile);</span>
+function approvalAuditEmployeeCode(profile) {
+  return isMainSystemAdmin(profile) ? mainEmployeeCode(profile) : <span class="branch-1 cbranch-no" title="branch not covered" >effectiveEmployeeCode(profile);</span>
 }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >module.exports = {</span>
+module.exports = {
   employeeCode,
   effectiveEmployeeCode,
   mainEmployeeCode,
@@ -169,7 +169,7 @@ function <span class="fstat-no" title="function not covered" >approvalAuditEmplo
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-12T10:51:38.700Z
+                at 2026-10-14T04:31:52.128Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

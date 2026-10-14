@@ -10,5 +10,6 @@ router.get('/:id', authenticationMiddleware, controller.get);
 router.post('/', authenticationMiddleware, controller.create);
 router.patch('/:id', authenticationMiddleware, controller.update);
 router.patch('/:id/active', authenticationMiddleware, controller.setActive);
+router.patch('/:id/primary', authenticationMiddleware, controller.setPrimary);
 router.delete('/:id', authenticationMiddleware, controller.remove);
 module.exports = router;

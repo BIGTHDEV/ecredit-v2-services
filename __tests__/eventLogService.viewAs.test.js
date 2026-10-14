@@ -117,4 +117,26 @@ describe('event log actor while Viewing As', () => {
     expect(payload.request.bodyFields).toContain('approvalCustomization');
     expect(payload.request.approvalCustomization).toEqual(approvalCustomization);
   });
+
+  it('includes the status change reason in the Event Log payload', async () => {
+    const reason = 'The request needs to return to approval for correction.';
+    const event = await recordEvent('/dev/api/requests/request-1/status', true, {
+      statusId: '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b',
+      description: reason,
+    });
+
+    expect(JSON.parse(event.DESCRIPTION).request.body.description).toBe(reason);
+  });
+
+  it('preserves the status change reason when an Event Log payload is truncated', async () => {
+    const reason = 'Please return the request to the approval workflow.';
+    const event = await recordEvent('/dev/api/requests/request-1/status', true, {
+      description: reason,
+      crmPayload: { oversized: 'x'.repeat(33 * 1024) },
+    });
+    const payload = JSON.parse(event.DESCRIPTION);
+
+    expect(payload.payloadTruncated).toBe(true);
+    expect(payload.statusChangeReason).toBe(reason);
+  });
 });

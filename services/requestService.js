@@ -14,6 +14,7 @@ const WAITING_APPROVAL_STATUS_ID = '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b';
 const FINAL_STATUS_ID = '014e8e8b-42cf-4b2f-8cae-e395e26efbcd';
 const REJECTED_STATUS_ID = '94589a22-12e5-4298-aa30-06295acbe1b9';
 const PENDING_APPROVAL_TYPE_ID = 'b4c27a6c-ab7c-4ce5-b885-997f9104c23d';
+const APPROVED_APPROVAL_TYPE_ID = 'aab5ce03-1c54-48c8-8305-6b1a017b43fd';
 const BACKWARD_APPROVAL_TYPE_ID = 'b76065cc-6507-458d-94ce-87231cbaa57c';
 const SMALL_CUSTOMER_SIZE_ID = 'd8ce72cf-0228-4293-9699-311eeecb926d';
 const MEDIUM_CUSTOMER_SIZE_ID = '9d9d84c7-8926-4629-b06f-2cb4d434fc33';
@@ -634,9 +635,27 @@ async function getApprovalSubmitOptions(requestId) {
   );
   if (!request) return null;
 
-  const [approvers, approverTypes, defaultApprovers] = await Promise.all([
+  const [approvers, bdsReviewApprovers, approverTypes, defaultApprovers] = await Promise.all([
     database.query(
-      `SELECT EMP_CODE AS ID, CONCAT(INITIALS, '-', USERNAME) AS NAME, CURRENT_EMAIL AS EMAIL
+      `SELECT DISTINCT TB1.APPROVER_ID AS ID,
+              CONCAT(TB3.INITIALS, '-', TB3.USERNAME) AS NAME,
+              TB1.APPROVER_TYPE_ID,
+              TB1.[PRIMARY] AS [PRIMARY]
+       FROM APPROVERS AS TB1
+       INNER JOIN APPROVER_TYPES AS TB2
+         ON CONVERT(VARCHAR(36), TB2.ID) COLLATE DATABASE_DEFAULT
+          = CONVERT(VARCHAR(36), TB1.APPROVER_TYPE_ID) COLLATE DATABASE_DEFAULT
+       INNER JOIN S_EMPLOYEE1 AS TB3
+         ON TB3.EMP_CODE = TB1.APPROVER_ID
+       WHERE TB1.ENABLED = '1'
+         AND TB2.ENABLED = '1'
+         AND TB3.WORK_STATUS = '3'
+         AND TB3.CURRENT_EMAIL IS NOT NULL
+       ORDER BY TB1.APPROVER_TYPE_ID, NAME`,
+      { type: QueryTypes.SELECT },
+    ),
+    database.query(
+      `SELECT EMP_CODE AS ID, CONCAT(INITIALS, '-', USERNAME) AS NAME
        FROM S_EMPLOYEE1
        WHERE WORK_STATUS = '3' AND CURRENT_EMAIL IS NOT NULL
        ORDER BY INITIALS ASC`,
@@ -650,7 +669,8 @@ async function getApprovalSubmitOptions(requestId) {
       { type: QueryTypes.SELECT },
     ),
     database.query(
-      `SELECT TB1.ID, TB1.NAME, TB1.DESCRIPTION, TB1.APPROVER_ID, TB1.APPROVER_TYPE_ID
+      `SELECT TB1.ID, TB1.NAME, TB1.DESCRIPTION, TB1.APPROVER_ID, TB1.APPROVER_TYPE_ID,
+              TB1.[PRIMARY] AS [PRIMARY]
        FROM APPROVERS AS TB1
        LEFT JOIN APPROVER_TYPES AS TB2 ON TB1.APPROVER_TYPE_ID = TB2.ID
        WHERE TB1.ENABLED = '1'
@@ -663,6 +683,7 @@ async function getApprovalSubmitOptions(requestId) {
   return {
     proposedLimitAmount: request.PROPOSED_LIMIT_AMOUNT,
     approvers,
+    bdsReviewApprovers,
     approverTypes,
     defaultApprovers,
   };
@@ -781,7 +802,17 @@ async function submitRequest(id, command, updatedBy) {
         { type: QueryTypes.SELECT, transaction },
       ),
       database.query(
-        'SELECT EMP_CODE FROM S_EMPLOYEE1 WHERE WORK_STATUS = \'3\' AND CURRENT_EMAIL IS NOT NULL',
+        `SELECT DISTINCT TB1.APPROVER_ID AS EMP_CODE, TB1.APPROVER_TYPE_ID
+         FROM APPROVERS AS TB1
+         INNER JOIN APPROVER_TYPES AS TB2
+           ON CONVERT(VARCHAR(36), TB2.ID) COLLATE DATABASE_DEFAULT
+            = CONVERT(VARCHAR(36), TB1.APPROVER_TYPE_ID) COLLATE DATABASE_DEFAULT
+         INNER JOIN S_EMPLOYEE1 AS TB3
+           ON TB3.EMP_CODE = TB1.APPROVER_ID
+         WHERE TB1.ENABLED = '1'
+           AND TB2.ENABLED = '1'
+           AND TB3.WORK_STATUS = '3'
+           AND TB3.CURRENT_EMAIL IS NOT NULL`,
         { type: QueryTypes.SELECT, transaction },
       ),
       database.query(
@@ -804,10 +835,14 @@ async function submitRequest(id, command, updatedBy) {
     if (pendingRows.length) throw conflictError('This request already has pending approvals.');
 
     const typeIds = new Set(approverTypes.map((type) => String(type.ID)));
-    const approverIds = new Set(approvers.map((approver) => String(approver.EMP_CODE)));
+    const approverAssignments = new Set(approvers.map((approver) =>
+      `${String(approver.APPROVER_TYPE_ID).toLowerCase()}:${String(approver.EMP_CODE)}`,
+    ));
     normalizedSteps.forEach((step, index) => {
       if (!typeIds.has(step.approverTypeId)) throw validationError(`Approval step ${index + 1} uses an invalid approver type.`);
-      if (!approverIds.has(step.approverId)) throw validationError(`Approval step ${index + 1} uses an invalid approver.`);
+      if (!approverAssignments.has(`${step.approverTypeId.toLowerCase()}:${step.approverId}`)) {
+        throw validationError(`Approval step ${index + 1} uses an approver not configured for the selected approver type.`);
+      }
     });
 
     const requestUpdate = {
@@ -2078,6 +2113,172 @@ async function processFinalAction(id, action, payload, updatedBy, isSystemAdmin 
   return getRequestById(id);
 }
 
+async function changeRequestStatus(id, statusId, updatedBy, updateApprovers = false, approveAllApprovers = false) {
+  const allowedStatuses = new Set([
+    DRAFT_STATUS_ID,
+    WAITING_APPROVAL_STATUS_ID,
+    FINAL_STATUS_ID,
+    COMPLETED_STATUS_ID,
+  ]);
+  if (typeof statusId !== 'string' || !allowedStatuses.has(statusId)) {
+    throw validationError('Unsupported request status.');
+  }
+  if (!Number.isInteger(updatedBy)) {
+    throw validationError('A numeric employee code is required to change request status.');
+  }
+  if (typeof updateApprovers !== 'boolean') {
+    throw validationError('updateApprovers must be a boolean.');
+  }
+  if (typeof approveAllApprovers !== 'boolean') {
+    throw validationError('approveAllApprovers must be a boolean.');
+  }
+
+  const database = getDatabase();
+  const transaction = await database.transaction();
+  try {
+    const requestRows = await database.query(
+      `SELECT TOP 1 TB1.ID, TB1.STATUS_ID
+       FROM REQUESTS AS TB1 WITH (UPDLOCK, ROWLOCK)
+       WHERE CONVERT(VARCHAR(36), TB1.ID) COLLATE DATABASE_DEFAULT
+           = CONVERT(VARCHAR(36), :id) COLLATE DATABASE_DEFAULT
+         AND TB1.ENABLED = '1'`,
+      { replacements: { id }, type: QueryTypes.SELECT, transaction },
+    );
+    const request = requestRows[0];
+    if (!request) throw notFoundError(`Request ${id} was not found.`);
+    if (String(request.STATUS_ID).toLowerCase() === statusId.toLowerCase()) {
+      throw conflictError('The request already has this status.');
+    }
+
+    if (statusId === WAITING_APPROVAL_STATUS_ID) {
+      const assignedRows = await database.query(
+        `SELECT TOP 1 ID
+         FROM APPROVALS
+         WHERE CONVERT(VARCHAR(36), REQUEST_ID) COLLATE DATABASE_DEFAULT
+             = CONVERT(VARCHAR(36), :id) COLLATE DATABASE_DEFAULT`,
+        { replacements: { id }, type: QueryTypes.SELECT, transaction },
+      );
+      if (!assignedRows[0]) {
+        throw validationError('Waiting-Approval requires at least one assigned approver.');
+      }
+    }
+
+    let finalApproval = null;
+    if (statusId === COMPLETED_STATUS_ID && updateApprovers) {
+      const finalApprovalRows = await database.query(
+        `SELECT TOP 1
+           LIMIT_AMOUNT, TERM_ID, RATING_ID, VALID_FROM, VALID_TO, DESCRIPTION,
+           IS_PERMANENT, IS_TEMPORARY
+         FROM APPROVALS
+         WHERE CONVERT(VARCHAR(36), REQUEST_ID) COLLATE DATABASE_DEFAULT
+             = CONVERT(VARCHAR(36), :id) COLLATE DATABASE_DEFAULT
+           AND ENABLED = '1'
+         ORDER BY UPDATED_DATE DESC, SORTING DESC`,
+        { replacements: { id }, type: QueryTypes.SELECT, transaction },
+      );
+      finalApproval = finalApprovalRows[0] || null;
+    }
+
+    if (approveAllApprovers) {
+      await database.query(
+        `UPDATE APPROVALS
+         SET APPROVAL_TYPE_ID = :approvedTypeId,
+             UPDATED_BY = :updatedBy, UPDATED_DATE = GETDATE()
+         WHERE CONVERT(VARCHAR(36), REQUEST_ID) COLLATE DATABASE_DEFAULT
+             = CONVERT(VARCHAR(36), :id) COLLATE DATABASE_DEFAULT
+           AND ENABLED = '1'`,
+        {
+          replacements: { id, updatedBy, approvedTypeId: APPROVED_APPROVAL_TYPE_ID },
+          type: QueryTypes.UPDATE,
+          transaction,
+        },
+      );
+    } else if (updateApprovers) {
+      if (statusId === DRAFT_STATUS_ID) {
+        await database.query(
+          `UPDATE APPROVALS
+           SET ENABLED = '0', UPDATED_BY = :updatedBy, UPDATED_DATE = GETDATE()
+           WHERE CONVERT(VARCHAR(36), REQUEST_ID) COLLATE DATABASE_DEFAULT
+               = CONVERT(VARCHAR(36), :id) COLLATE DATABASE_DEFAULT`,
+          { replacements: { id, updatedBy }, type: QueryTypes.UPDATE, transaction },
+        );
+      } else if (statusId === WAITING_APPROVAL_STATUS_ID) {
+        await database.query(
+          `UPDATE APPROVALS
+           SET ENABLED = '1', APPROVAL_TYPE_ID = :pendingTypeId,
+               UPDATED_BY = :updatedBy, UPDATED_DATE = GETDATE()
+           WHERE CONVERT(VARCHAR(36), REQUEST_ID) COLLATE DATABASE_DEFAULT
+               = CONVERT(VARCHAR(36), :id) COLLATE DATABASE_DEFAULT`,
+          {
+            replacements: { id, updatedBy, pendingTypeId: PENDING_APPROVAL_TYPE_ID },
+            type: QueryTypes.UPDATE,
+            transaction,
+          },
+        );
+      } else {
+        await database.query(
+          `UPDATE APPROVALS
+           SET APPROVAL_TYPE_ID = :approvedTypeId,
+               UPDATED_BY = :updatedBy, UPDATED_DATE = GETDATE()
+           WHERE CONVERT(VARCHAR(36), REQUEST_ID) COLLATE DATABASE_DEFAULT
+               = CONVERT(VARCHAR(36), :id) COLLATE DATABASE_DEFAULT
+             AND ENABLED = '1'`,
+          {
+            replacements: { id, updatedBy, approvedTypeId: APPROVED_APPROVAL_TYPE_ID },
+            type: QueryTypes.UPDATE,
+            transaction,
+          },
+        );
+      }
+    }
+
+    const requestUpdate = {
+      STATUS_ID: statusId,
+      UPDATED_BY: updatedBy,
+    };
+    if (statusId === COMPLETED_STATUS_ID && updateApprovers && finalApproval) {
+      requestUpdate.APPROVED_LIMIT_AMOUNT = finalApproval.LIMIT_AMOUNT;
+      requestUpdate.APPROVED_TERM_ID = finalApproval.TERM_ID;
+      requestUpdate.IS_LIMIT_APPROVED = Number(finalApproval.LIMIT_AMOUNT || 0) !== 0;
+      requestUpdate.IS_TERM_APPROVED = Boolean(finalApproval.TERM_ID);
+      requestUpdate.APPROVED_RATING_ID = finalApproval.RATING_ID;
+      requestUpdate.APPROVED_VALID_FROM = finalApproval.VALID_FROM;
+      requestUpdate.APPROVED_VALID_TO = finalApproval.VALID_TO;
+      requestUpdate.APPROVED_NOTES = finalApproval.DESCRIPTION;
+      requestUpdate.IS_PERMANENT_APPROVED = finalApproval.IS_PERMANENT;
+      requestUpdate.IS_TEMPORARY_APPROVED = finalApproval.IS_TEMPORARY;
+    }
+
+    const replacements = { id, updatedBy, statusId };
+    const approvedAssignments = Object.entries(requestUpdate)
+      .filter(([field]) => !['STATUS_ID', 'UPDATED_BY'].includes(field));
+    const approvedColumns = approvedAssignments.map(([field]) => `${field} = :${field}`).join(',\n             ');
+    approvedAssignments.forEach(([field, value]) => { replacements[field] = value; });
+    await database.query(
+      `UPDATE REQUESTS
+       SET STATUS_ID = :statusId, UPDATED_BY = :updatedBy, UPDATED_DATE = GETDATE()
+           ${approvedColumns ? `,\n           ${approvedColumns}` : ''}
+       WHERE CONVERT(VARCHAR(36), ID) COLLATE DATABASE_DEFAULT
+           = CONVERT(VARCHAR(36), :id) COLLATE DATABASE_DEFAULT
+         AND ENABLED = '1'`,
+      { replacements, type: QueryTypes.UPDATE, transaction },
+    );
+
+    await transaction.commit();
+  } catch (error) {
+    if (!transaction.finished) {
+      try {
+        await transaction.rollback();
+      } catch (rollbackError) {
+        error.rollbackError = { message: rollbackError.message, code: rollbackError.code };
+      }
+    }
+    throw error;
+  }
+
+  return getRequestById(id);
+}
+
 module.exports = {
   listRequests,
   getRequestById,
@@ -2093,4 +2294,5 @@ module.exports = {
   cloneRequestData,
   cancelRequest,
   processApprovalAction,
+  changeRequestStatus,
 };
