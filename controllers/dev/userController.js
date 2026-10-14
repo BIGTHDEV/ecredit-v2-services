@@ -7,7 +7,7 @@ const { effectiveEmployeeCode, mainEmployeeCode } = require('../../helpers/userI
 function requireSystemAdmin(req) {
   const profile = req.user?.profile;
   if (isAdminRole(profile?.ROLE, profile?.ROLE_ID)) return;
-  const error = new Error('Only the System Admin or Super Admin role can manage users.');
+  const error = new Error('Only the System Admin or Super User role can manage users.');
   error.statusCode = 403;
   error.code = 'FORBIDDEN';
   throw error;
@@ -16,7 +16,7 @@ function requireSystemAdmin(req) {
 function requireLoggedInSystemAdmin(req) {
   const profile = req.user?.profile;
   if (isAdminRole(profile?.LOGGED_IN_ROLE, profile?.LOGGED_IN_ROLE_ID)) return;
-  const error = new Error('Only the System Admin or Super Admin role can manage users.');
+  const error = new Error('Only the System Admin or Super User role can manage users.');
   error.statusCode = 403;
   error.code = 'FORBIDDEN';
   throw error;

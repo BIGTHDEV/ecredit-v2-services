@@ -17,7 +17,7 @@ function requireSystemAdmin(req) {
     return;
   }
 
-  const error = new Error('Only the System Admin or Super Admin role can update permissions.');
+  const error = new Error('Only the System Admin or Super User role can update permissions.');
   error.statusCode = 403;
   error.code = 'FORBIDDEN';
   throw error;

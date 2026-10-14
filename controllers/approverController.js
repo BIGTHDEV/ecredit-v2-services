@@ -5,7 +5,7 @@ const { effectiveEmployeeCode } = require('../helpers/userIdentity');
 function requireSystemAdmin(req) {
   const profile = req.user?.profile;
   if (isAdminRole(profile?.ROLE, profile?.ROLE_ID)) return;
-  const error = new Error('Only the System Admin or Super Admin role can manage approvers.');
+  const error = new Error('Only the System Admin or Super User role can manage approvers.');
   error.statusCode = 403;
   error.code = 'FORBIDDEN';
   throw error;

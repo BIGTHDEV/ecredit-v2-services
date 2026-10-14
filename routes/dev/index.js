@@ -10,6 +10,7 @@ const permissionRoute = require('./permissionRoute');
 const userRoute = require('./userRoute');
 const approverRoute = require('./approverRoute');
 const emailApprovalRoute = require('../emailApprovalRoute');
+const notificationRoute = require('../notificationRoute');
 
 /**
  * Dev Environment Route Aggregator
@@ -34,5 +35,6 @@ router.use('/approvers', approverRoute);
 router.use('/health', healthRoute);
 router.use('/docs', docsRoute);
 router.use('/email-approval', emailApprovalRoute);
+router.use('/notifications', notificationRoute);
 
 module.exports = router;

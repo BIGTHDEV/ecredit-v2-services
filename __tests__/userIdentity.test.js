@@ -25,7 +25,7 @@ describe('View As user identity', () => {
     expect(approvalAuditEmployeeCode(profile)).toBe(20221459);
     expect(approvalAuditEmployeeCode({
       ...profile,
-      LOGGED_IN_ROLE: 'Super Admin',
+      LOGGED_IN_ROLE: 'Super User',
       LOGGED_IN_ROLE_ID: 'fd08992c-08cc-4c39-8f0d-dfcc0cb90663',
     })).toBe(20261631);
     expect(approvalAuditEmployeeCode({

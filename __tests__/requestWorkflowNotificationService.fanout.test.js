@@ -8,8 +8,10 @@ jest.mock('../emails/requestWorkflowEmail', () => ({ sendRequestWorkflowEmail: j
 jest.mock('../services/emailApprovalActionService', () => ({
   createEmailApprovalToken: jest.fn(({ approvalId, approverId, action }) => `${approvalId}:${approverId}:${action}`),
 }));
+jest.mock('../services/notificationService', () => ({ createWorkflowNotifications: jest.fn() }));
 
 const { listApprovalHistory } = require('../services/requestService');
+const { createWorkflowNotifications } = require('../services/notificationService');
 const { getRequestEmailModel } = require('../services/requestEmailModelService');
 const { sendRequestWorkflowEmail } = require('../emails/requestWorkflowEmail');
 const {
@@ -60,10 +62,22 @@ describe('parallel workflow notifications', () => {
       environment: 'prd',
       actorEmail: 'actor@example.com',
       actorName: 'ACTOR',
+      user: { profile: { CODE: '1009' } },
       transporter: {},
     });
 
     expect(sendRequestWorkflowEmail).toHaveBeenCalledTimes(2);
+    expect(createWorkflowNotifications).toHaveBeenCalledTimes(1);
+    expect(createWorkflowNotifications.mock.calls[0][0]).toMatchObject({
+      event: 'submit',
+      requestId: 'request-1',
+      actorEmail: 'actor@example.com',
+      actorCode: 1009,
+      toRecords: [
+        { email: 'first@example.com', name: 'FIRST-APPROVER' },
+        { email: 'second@example.com', name: 'SECOND-APPROVER' },
+      ],
+    });
     const callsByRecipient = new Map(sendRequestWorkflowEmail.mock.calls.map(([options]) => [
       options.recipients.to[0], options.emailModel,
     ]));
@@ -94,6 +108,7 @@ describe('parallel workflow notifications', () => {
     });
 
     expect(result).toEqual({ skipped: true, reason: 'Parallel approval is incomplete' });
+    expect(createWorkflowNotifications).not.toHaveBeenCalled();
     expect(getRequestEmailModel).not.toHaveBeenCalled();
     expect(sendRequestWorkflowEmail).not.toHaveBeenCalled();
   });
@@ -119,7 +134,23 @@ describe('parallel workflow notifications', () => {
     expect(sendRequestWorkflowEmail.mock.calls[0][0].recipients.to).toEqual(['next@example.com']);
   });
 
-  it('sends backward notifications to BDS Review and copies previous approvers plus the actor', () => {
+  it('still sends workflow email when in-app notification creation fails', async () => {
+    listApprovalHistory.mockResolvedValue([approval()]);
+    createWorkflowNotifications.mockRejectedValueOnce(new Error('table missing'));
+
+    await sendRequestWorkflowNotification({
+      event: 'submit',
+      requestId: 'request-1',
+      environment: 'prd',
+      actorEmail: 'actor@example.com',
+      actorName: 'ACTOR',
+      transporter: {},
+    });
+
+    expect(sendRequestWorkflowEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends backward notifications to BDS Review and copies the Requester', () => {
     const history = [
       approval({
         APPROVER_TYPE_NAME: 'Requester',
@@ -155,11 +186,7 @@ describe('parallel workflow notifications', () => {
       displayName: 'ACTOR',
     })).toEqual({
       toRecords: [{ email: 'bds@example.com', name: 'BDS-APPROVER' }],
-      ccRecords: [
-        { email: 'approver@example.com', name: 'APPROVER' },
-        { email: 'backward@example.com', name: 'BACKWARD-APPROVER' },
-        { email: 'actor@example.com', name: 'ACTOR' },
-      ],
+      ccRecords: [{ email: 'requester@example.com', name: 'REQUESTER' }],
       dear: 'BDS-APPROVER',
     });
   });
@@ -191,6 +218,14 @@ describe('parallel workflow notifications', () => {
 
     expect(sendRequestWorkflowEmail.mock.calls[0][0].subject)
       .toBe('Request was sent backward Acme (100 - TGEE)');
+    expect(sendRequestWorkflowEmail.mock.calls[0][0].recipients).toEqual({
+      to: ['bds@example.com'],
+      cc: ['requester@example.com'],
+    });
+    expect(createWorkflowNotifications.mock.calls[0][0]).toMatchObject({
+      toRecords: [{ email: 'bds@example.com', name: 'BDS-APPROVER' }],
+      ccRecords: [{ email: 'requester@example.com', name: 'REQUESTER' }],
+    });
     expect(listApprovalHistory).toHaveBeenCalledWith('request-1', { includeDisabledApprovals: true });
   });
 });

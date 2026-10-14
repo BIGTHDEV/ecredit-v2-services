@@ -4,6 +4,8 @@ const { getRequestEmailModel } = require('./requestEmailModelService');
 const { sendRequestWorkflowEmail } = require('../emails/requestWorkflowEmail');
 const config = require('../config/env');
 const { createEmailApprovalToken } = require('./emailApprovalActionService');
+const { createWorkflowNotifications } = require('./notificationService');
+const { employeeCode, approvalAuditEmployeeCode } = require('../helpers/userIdentity');
 
 function uniqueAddresses(records = []) {
     return [...new Set(records
@@ -79,22 +81,12 @@ function allApprovers(history) {
     ));
 }
 
-function backwardRecipients(history, actor) {
+function backwardRecipients(history) {
     const bdsApprovers = bdsReviewApprovers(history);
-    const previousApprovers = previousActioners(history).filter((item) => (
-        !/Requester/i.test(String(item.APPROVER_TYPE_NAME || ''))
-    ));
-    const backwardApprovers = currentCycleHistory(history).filter((item) => (
-        item.APPROVAL_TYPE_NAME === 'Backward'
-        && String(item.APPROVER_EMAIL || '').trim()
-    ));
+    const requester = submitter(history);
     return {
         toRecords: bdsApprovers.map((item) => recipient(item.APPROVER_EMAIL, item.APPROVER_NAME)),
-        ccRecords: [
-            ...previousApprovers.map((item) => recipient(item.APPROVER_EMAIL, item.APPROVER_NAME)),
-            ...backwardApprovers.map((item) => recipient(item.APPROVER_EMAIL, item.APPROVER_NAME)),
-            recipient(actor?.email, actor?.displayName || actor?.name),
-        ],
+        ccRecords: requester ? [recipient(requester.APPROVER_EMAIL, requester.APPROVER_NAME)] : [],
         dear: uniqueNames(bdsApprovers).join(', ') || 'All',
     };
 }
@@ -119,7 +111,7 @@ function resolveRecipients(event, history, actor) {
     }
 
     if (event === 'backward') {
-        return backwardRecipients(history, actor);
+        return backwardRecipients(history);
     }
 
     if (event === 'cancel' || event === 'final-cancel') {
@@ -240,7 +232,21 @@ async function sendRequestWorkflowNotification({ event, requestId, environment, 
     if (!recipients.to.length) return { skipped: true, reason: 'No recipients' };
 
     const emailModel = await getRequestEmailModel(requestId, resolved.dear);
-    const subject = event === 'submit' || event === 'approve'
+    try {
+        await createWorkflowNotifications({
+            event,
+            requestId,
+            toRecords: resolved.toRecords,
+            ccRecords: resolved.ccRecords,
+            actorEmail,
+            actorName,
+            actorCode: employeeCode(auditActorCode) ?? approvalAuditEmployeeCode(user?.profile),
+            emailModel,
+        });
+    } catch (error) {
+        logger.error(`Workflow in-app notification failed for request ${requestId}: ${error.message}`);
+    }
+    const subject =  event === 'submit' || event === 'approve'
         ? buildApprovalSubject(emailModel)
         : event === 'final'
             ? `${eventConfig.subject} ${emailModel.companyName} (${emailModel.salesGroup})`
