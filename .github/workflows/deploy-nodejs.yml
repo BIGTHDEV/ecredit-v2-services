@@ -50,3 +50,4 @@ jobs:
         if: success()
         run: |
           nssm restart ${{ env.SERVICE_NAME }}
+
