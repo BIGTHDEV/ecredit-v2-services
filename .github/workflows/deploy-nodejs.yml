@@ -30,7 +30,7 @@ jobs:
       - name: Copy source code to deploy path
         shell: powershell
         run: |
-          robocopy . "${{ env.DEPLOYE_PATH }}" /MIR /XD .git node_modules logs /XF .env web.config
+          robocopy . "${{ env.DEPLOYE_PATH }}" /E /XD .git node_modules logs /XF .env .env.dev .env.qas .env.prd web.config
           if ($LASTEXITCODE -le 7) {
             Write-Host "Robocopy completed with acceptable exit code: $LASTEXITCODE"
             exit 0
