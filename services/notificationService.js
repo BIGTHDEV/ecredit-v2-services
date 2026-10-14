@@ -83,7 +83,7 @@ function notificationTab(event, recipientType) {
 }
 
 async function createWorkflowNotifications({ event, requestId, toRecords, ccRecords, actorEmail, actorName, actorCode, emailModel }) {
-  const recipients = collectRecipients(toRecords, ccRecords, actorEmail);
+  const recipients = collectRecipients(toRecords, ccRecords, event === 'backward' ? undefined : actorEmail);
   if (!recipients.length) return [];
   const auditCode = employeeCode(actorCode);
   if (auditCode === null) throw new Error('Actor user code is required to create notifications.');

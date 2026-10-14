@@ -150,7 +150,7 @@ describe('parallel workflow notifications', () => {
     expect(sendRequestWorkflowEmail).toHaveBeenCalledTimes(1);
   });
 
-  it('sends backward notifications to BDS Review and copies the Requester', () => {
+  it('sends backward notifications to BDS Review and copies the current-cycle backward approver', () => {
     const history = [
       approval({
         APPROVER_TYPE_NAME: 'Requester',
@@ -173,6 +173,14 @@ describe('parallel workflow notifications', () => {
         APPROVER_EMAIL: 'backward@example.com',
       }),
       approval({
+        APPROVER_TYPE_NAME: 'Manager Approve',
+        APPROVAL_STEP: 3,
+        APPROVAL_TYPE_NAME: 'Backward',
+        APPROVER_NAME: 'OLD-BACKWARD-APPROVER',
+        APPROVER_EMAIL: 'old-backward@example.com',
+        CURRENT_CYCLE: false,
+      }),
+      approval({
         APPROVER_TYPE_NAME: 'Manager Approve (BDS Review)',
         APPROVAL_STEP: 2,
         APPROVAL_TYPE_NAME: 'Pending',
@@ -186,7 +194,7 @@ describe('parallel workflow notifications', () => {
       displayName: 'ACTOR',
     })).toEqual({
       toRecords: [{ email: 'bds@example.com', name: 'BDS-APPROVER' }],
-      ccRecords: [{ email: 'requester@example.com', name: 'REQUESTER' }],
+      ccRecords: [{ email: 'backward@example.com', name: 'BACKWARD-APPROVER' }],
       dear: 'BDS-APPROVER',
     });
   });
@@ -205,14 +213,21 @@ describe('parallel workflow notifications', () => {
         APPROVER_NAME: 'BDS-APPROVER',
         APPROVER_EMAIL: 'bds@example.com',
       }),
+      approval({
+        APPROVER_TYPE_NAME: 'Manager Approve',
+        APPROVAL_STEP: 3,
+        APPROVAL_TYPE_NAME: 'Backward',
+        APPROVER_NAME: 'BACKWARD-APPROVER',
+        APPROVER_EMAIL: 'backward@example.com',
+      }),
     ]);
 
     await sendRequestWorkflowNotification({
       event: 'backward',
       requestId: 'request-1',
       environment: 'prd',
-      actorEmail: 'actor@example.com',
-      actorName: 'ACTOR',
+      actorEmail: 'backward@example.com',
+      actorName: 'BACKWARD-APPROVER',
       transporter: {},
     });
 
@@ -220,11 +235,11 @@ describe('parallel workflow notifications', () => {
       .toBe('Request was sent backward Acme (100 - TGEE)');
     expect(sendRequestWorkflowEmail.mock.calls[0][0].recipients).toEqual({
       to: ['bds@example.com'],
-      cc: ['requester@example.com'],
+      cc: ['backward@example.com'],
     });
     expect(createWorkflowNotifications.mock.calls[0][0]).toMatchObject({
       toRecords: [{ email: 'bds@example.com', name: 'BDS-APPROVER' }],
-      ccRecords: [{ email: 'requester@example.com', name: 'REQUESTER' }],
+      ccRecords: [{ email: 'backward@example.com', name: 'BACKWARD-APPROVER' }],
     });
     expect(listApprovalHistory).toHaveBeenCalledWith('request-1', { includeDisabledApprovals: true });
   });

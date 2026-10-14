@@ -85,7 +85,7 @@ describe('notificationService', () => {
       ...common,
       event: 'backward',
       toRecords: [{ email: 'bds@example.com' }],
-      ccRecords: [{ email: 'requester@example.com' }],
+      ccRecords: [{ email: 'actor@example.com' }],
     });
 
     expect(mockNotification.bulkCreate.mock.calls[0][0].map((row) => row.TAB)).toEqual(['approver']);
@@ -94,6 +94,8 @@ describe('notificationService', () => {
       'credit-request-form',
       'credit-request-form',
     ]);
+    expect(mockNotification.bulkCreate.mock.calls[2][0].map((row) => row.RECIPIENT_TYPE)).toEqual(['TO', 'CC']);
+    expect(mockNotification.bulkCreate.mock.calls[2][0][1].RECIPIENT_EMAIL).toBe('actor@example.com');
   });
 
   it('requires the actor user code', async () => {

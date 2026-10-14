@@ -83,10 +83,14 @@ function allApprovers(history) {
 
 function backwardRecipients(history) {
     const bdsApprovers = bdsReviewApprovers(history);
-    const requester = submitter(history);
+    const backwardApprovers = currentCycleHistory(history).filter((item) => (
+        item.APPROVAL_TYPE_NAME === 'Backward'
+        && !/Requester/i.test(String(item.APPROVER_TYPE_NAME || ''))
+        && String(item.APPROVER_EMAIL || '').trim()
+    ));
     return {
         toRecords: bdsApprovers.map((item) => recipient(item.APPROVER_EMAIL, item.APPROVER_NAME)),
-        ccRecords: requester ? [recipient(requester.APPROVER_EMAIL, requester.APPROVER_NAME)] : [],
+        ccRecords: backwardApprovers.map((item) => recipient(item.APPROVER_EMAIL, item.APPROVER_NAME)),
         dear: uniqueNames(bdsApprovers).join(', ') || 'All',
     };
 }
