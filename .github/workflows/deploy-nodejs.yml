@@ -44,9 +44,7 @@ jobs:
 
       - name: Run basic test
         working-directory: ${{ env.DEPLOYE_PATH }}
-        env:
-          NODE_ENV: ${{ github.ref == 'refs/heads/master' && 'prd' || 'qas' }}
-        run: npm test -- --runInBand
+        run: npm run start:${{ github.ref == 'refs/heads/master' && 'prd' || 'qas' }}
 
       - name: Restart service via NSSM
         if: success()
