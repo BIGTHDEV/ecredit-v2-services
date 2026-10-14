@@ -30,6 +30,10 @@ nssm install node-app-ecredit-dev "C:\Program Files\nodejs\node.exe" "D:\web_is\
 nssm set node-app-ecredit-dev AppEnvironmentExtra NODE_ENV=dev
 nssm set node-app-ecredit-dev AppDirectory "D:\web_is\Services\iisnode\ecredit-services"
 
+# Set the matching environment for QAS/PRD services as well
+nssm set node-app-ecredit-v2-qas AppEnvironmentExtra NODE_ENV=qas
+nssm set node-app-ecredit-v2 AppEnvironmentExtra NODE_ENV=prd
+
 # Set startup type
 nssm set node-app-ecredit-dev Start SERVICE_AUTO_START
 

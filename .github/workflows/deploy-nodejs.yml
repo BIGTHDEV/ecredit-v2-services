@@ -42,12 +42,30 @@ jobs:
         working-directory: ${{ env.DEPLOYE_PATH }}
         run: npm install
 
+      - name: Stop service before startup check
+        run: |
+          nssm stop $env:SERVICE_NAME
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to stop service $env:SERVICE_NAME"
+          }
+
       - name: Run basic test
         working-directory: ${{ env.DEPLOYE_PATH }}
+        env:
+          STARTUP_CHECK_ONLY: 'true'
         run: npm run start:${{ github.ref == 'refs/heads/master' && 'prd' || 'qas' }}
 
-      - name: Restart service via NSSM
+      - name: Start service via NSSM
         if: success()
+        env:
+          NODE_ENV: ${{ github.ref == 'refs/heads/master' && 'prd' || 'qas' }}
         run: |
-          nssm restart ${{ env.SERVICE_NAME }}
+          nssm set $env:SERVICE_NAME AppEnvironmentExtra "NODE_ENV=$env:NODE_ENV"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to set NODE_ENV for service $env:SERVICE_NAME"
+          }
 
+          nssm start $env:SERVICE_NAME
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to start service $env:SERVICE_NAME"
+          }

@@ -169,6 +169,10 @@ async function startServer() {
           `[STARTUP] ${config.environment.toUpperCase()} API started successfully at https://localhost:${config.port}/${config.environment}/api`,
         );
       }
+
+      if (process.env.STARTUP_CHECK_ONLY === 'true') {
+        gracefulShutdown('startup check completed');
+      }
     });
   } catch (error) {
     logger.error(`Fatal error during startup: ${error.message}`);
