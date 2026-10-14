@@ -1,0 +1,52 @@
+name: Build and Deploy Node.js Express Backend
+
+on:
+  push:
+    branches:
+      - qas
+      - master
+
+env:
+  NODE_VERSION: 22.12.0
+  APP_NAME: ecredit-v2-services
+  SERVICE_NAME: node-app-ecredit-v2
+  DEPLOYE_PATH: D:\web_is\Services\iisnode\ecredit-v2-services
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, service-ecredit-v2, ecredit-v2-services]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Copy source code to deploy path
+        shell: powershell
+        run: |
+          robocopy . "${{ env.DEPLOYE_PATH }}" /MIR /XD .git node_modules logs /XF .env web.config
+          if ($LASTEXITCODE -le 7) {
+            Write-Host "Robocopy completed with acceptable exit code: $LASTEXITCODE"
+            exit 0
+          } else {
+            Write-Error "Robocopy failed with exit code: $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+
+      - name: Install dependencies
+        working-directory: ${{ env.DEPLOYE_PATH }}
+        run: npm install
+
+      - name: Run basic test
+        working-directory: ${{ env.DEPLOYE_PATH }}
+        run: npm run main
+
+      - name: Restart service via NSSM
+        if: success()
+        run: |
+          nssm restart ${{ env.SERVICE_NAME }}
