@@ -15,7 +15,7 @@ env:
 
 jobs:
   build-and-deploy:
-    runs-on: [self-hosted, service-ecredit-v2, ecredit-v2-services]
+    runs-on: [self-hosted, ecredit-v2-services]
     timeout-minutes: 30
 
     steps:
