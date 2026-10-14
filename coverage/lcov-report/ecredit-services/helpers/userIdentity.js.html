@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">84.61% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>11/13</span>
+                <span class='fraction'>13/13</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">55.55% </span>
+                <span class="strong">88.88% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>10/18</span>
+                <span class='fraction'>16/18</span>
             </div>
         
             
@@ -96,33 +96,33 @@
 <a name='L31'></a><a href='#L31'>31</a>
 <a name='L32'></a><a href='#L32'>32</a>
 <a name='L33'></a><a href='#L33'>33</a>
-<a name='L34'></a><a href='#L34'>34</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L34'></a><a href='#L34'>34</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">26x</span>
-<span class="cline-any cline-yes">26x</span>
-<span class="cline-any cline-yes">26x</span>
-<span class="cline-any cline-yes">26x</span>
-<span class="cline-any cline-yes">26x</span>
+<span class="cline-any cline-yes">48x</span>
+<span class="cline-any cline-yes">38x</span>
+<span class="cline-any cline-yes">38x</span>
+<span class="cline-any cline-yes">37x</span>
+<span class="cline-any cline-yes">37x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">19x</span>
+<span class="cline-any cline-yes">37x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">7x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -132,15 +132,15 @@
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { isSystemAdminRole } = require('./roleAuthorization');
 &nbsp;
 function employeeCode(value) {
-  <span class="missing-if-branch" title="if path not taken" >I</span>if (value === null || value === undefined || value === '') <span class="cstat-no" title="statement not covered" >return null;</span>
-  const normalized = typeof value === 'string' ? value.trim() : <span class="branch-1 cbranch-no" title="branch not covered" >value;</span>
-  <span class="missing-if-branch" title="if path not taken" >I</span>if (normalized === '') <span class="cstat-no" title="statement not covered" >return null;</span>
+  if (value === null || value === undefined || value === '') return null;
+  const normalized = typeof value === 'string' ? value.trim() : value;
+  if (normalized === '') return null;
   const code = Number(normalized);
-  return Number.isSafeInteger(code) ? code : <span class="branch-1 cbranch-no" title="branch not covered" >null;</span>
+  return Number.isSafeInteger(code) ? code : null;
 }
 &nbsp;
 function effectiveEmployeeCode(profile) {
-  return employeeCode(profile?.EFFECTIVE_CODE || <span class="branch-1 cbranch-no" title="branch not covered" >profile?.CODE)</span>;
+  return employeeCode(profile?.EFFECTIVE_CODE || profile?.CODE);
 }
 &nbsp;
 function mainEmployeeCode(profile) {
@@ -152,7 +152,7 @@ function isMainSystemAdmin(profile) {
 }
 &nbsp;
 function approvalAuditEmployeeCode(profile) {
-  return isMainSystemAdmin(profile) ? mainEmployeeCode(profile) : <span class="branch-1 cbranch-no" title="branch not covered" >effectiveEmployeeCode(profile);</span>
+  return isMainSystemAdmin(profile) ? mainEmployeeCode(profile) : effectiveEmployeeCode(profile);
 }
 &nbsp;
 module.exports = {
@@ -169,7 +169,7 @@ module.exports = {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-14T04:31:52.128Z
+                at 2026-10-14T08:46:43.626Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

@@ -9,7 +9,6 @@ on:
 env:
   NODE_VERSION: 22.12.0
   APP_NAME: ecredit-v2-services
-  DEPLOY_SCRIPT: ${{ github.ref == 'refs/heads/master' && 'start:prd' || 'start:qas' }}
   SERVICE_NAME: ${{ github.ref == 'refs/heads/master' && 'node-app-ecredit-v2' || 'node-app-ecredit-v2-qas' }}
   DEPLOYE_PATH: D:\web_is\Services\iisnode\ecredit-v2-services\${{ github.ref == 'refs/heads/master' && 'PRD' || 'QAS' }}\
 
@@ -45,7 +44,9 @@ jobs:
 
       - name: Run basic test
         working-directory: ${{ env.DEPLOYE_PATH }}
-        run: npm run ${{ env.DEPLOY_SCRIPT }}
+        env:
+          NODE_ENV: ${{ github.ref == 'refs/heads/master' && 'prd' || 'qas' }}
+        run: npm test -- --runInBand
 
       - name: Restart service via NSSM
         if: success()

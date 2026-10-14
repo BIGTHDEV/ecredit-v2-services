@@ -162,6 +162,13 @@ async function startServer() {
       logger.info(`✓ HTTPS server listening on port ${config.port}`);
       logger.info(`✓ API available at: https://localhost:${config.port}/${config.environment}/api`);
       logger.info(`✓ Swagger UI available at: https://localhost:${config.port}/${config.environment}/api/docs`);
+
+      if (!config.isDevelopment()) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[STARTUP] ${config.environment.toUpperCase()} API started successfully at https://localhost:${config.port}/${config.environment}/api`,
+        );
+      }
     });
   } catch (error) {
     logger.error(`Fatal error during startup: ${error.message}`);
