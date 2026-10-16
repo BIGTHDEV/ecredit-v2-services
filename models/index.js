@@ -21,6 +21,8 @@ const defineApprover = require('./approver');
 const defineApproverType = require('./approverType');
 const defineEmail = require('./email');
 const defineNotification = require('./notification');
+const defineEmailReminderConfig = require('./emailReminderConfig');
+const defineEmailReminderState = require('./emailReminderState');
 
 /**
  * Sequelize model registry
@@ -53,6 +55,8 @@ function initModels(sequelize) {
   const ApproverType = defineApproverType(sequelize);
   const Email = defineEmail(sequelize);
   const Notification = defineNotification(sequelize);
+  const EmailReminderConfig = defineEmailReminderConfig(sequelize);
+  const EmailReminderState = defineEmailReminderState(sequelize);
 
   // TB1 -> TB2 (USERS.ID = S_EMPLOYEE1.EMP_CODE)
   User.hasOne(Employee, { as: 'employee', foreignKey: 'EMP_CODE', sourceKey: 'ID' });
@@ -98,6 +102,7 @@ function initModels(sequelize) {
 
   Log.belongsTo(Employee, { as: 'updatedByEmployee', foreignKey: 'UPDATED_BY', targetKey: 'EMP_CODE' });
   Log.belongsTo(Request, { as: 'request', foreignKey: 'REQUEST_ID', targetKey: 'ID' });
+  Email.belongsTo(Request, { as: 'request', foreignKey: 'REQUEST_ID', targetKey: 'ID' });
   CustomerLog.belongsTo(Employee, { as: 'createdByEmployee', foreignKey: 'CREATED_BY', targetKey: 'EMP_CODE' });
   CustomerLog.belongsTo(LogType, { as: 'logType', foreignKey: 'LOG_TYPE_ID', targetKey: 'ID' });
   Email.belongsTo(Employee, { as: 'updatedByEmployee', foreignKey: 'UPDATED_BY', targetKey: 'EMP_CODE' });
@@ -134,6 +139,8 @@ function initModels(sequelize) {
     ApproverType,
     Email,
     Notification,
+    EmailReminderConfig,
+    EmailReminderState,
   };
   return models;
 }

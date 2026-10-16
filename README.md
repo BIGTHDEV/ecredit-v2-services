@@ -11,6 +11,21 @@ Express.js backend service for e-Credit application with:
 
 ## Quick Start
 
+### Administration email logs
+
+`GET /requests/email-logs` lists email logs across active requests for System Admin
+and Super User roles only. It accepts `page`, `pageSize` (up to 100), `sort`, `dir`
+and column filters `NO`, `CRM_NO`, `SOLD_TO`, `CUSTOMER_TAX_NO`, `name`,
+`logTypeId` (Success/Sent, Error/Failed, Pending/Warning) and `createdDate`, `actor`.
+Filters are limited to 100 characters. Responses are non-cacheable and contain
+request identity plus email summaries, not stored send parameters.
+Automatic reminders without an employee updater display **System (Auto Reminder)**
+in Updated By, including in request-details email logs. Actor filtering and sorting
+use this label too. Manual resends retain the employee actor.
+Payload inspection and resending reuse `GET /requests/:requestId/emails/:emailId`
+and `POST /requests/:requestId/emails/resend` with `{ "emailIds": [...] }`.
+No database migration is required for this page.
+
 ### Prerequisites
 - Node.js 22.12.0
 - SQL Server (clouddb01\dev, clouddb01\qas, or clouddb01\prd)

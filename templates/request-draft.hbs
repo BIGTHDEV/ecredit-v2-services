@@ -64,6 +64,14 @@
         font-weight: bold;
     }
 
+    .reminder-banner {
+        margin: 0 0 18px;
+        color: red;
+        font-family: Verdana, sans-serif;
+        font-size: 20pt;
+        font-weight: bolder;
+    }
+
     .intro {
         margin: 0 0 26px;
         color: #52665d;
@@ -342,6 +350,9 @@
                 <tr>
                     <td class="email-content">
                         <p class="greeting">Dear {{dear}},</p>
+                        {{#if isReminder}}
+                        <p class="reminder-banner">Reminder!!</p>
+                        {{/if}}
                         <p class="intro">Please review the credit request details below.</p>
 
                         <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">

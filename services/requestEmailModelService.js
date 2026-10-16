@@ -289,12 +289,13 @@ function mapRequestToEmailModel(request, dear = '-', approvalHistory = []) {
   };
 }
 
-async function getRequestEmailModel(requestId, dear = '-') {
+async function getRequestEmailModel(requestId, dear = '-', { transaction } = {}) {
   if (typeof requestId !== 'string' || !requestId.trim()) throw new Error('requestId is required.');
 
   const { Request, Rating, Term, Size } = getModels();
   const request = await Request.findOne({
     where: { ID: requestId, ENABLED: true },
+    ...(transaction ? { transaction } : {}),
     include: [
       { model: Size, as: 'size', attributes: ['ID', 'NAME'] },
       { model: Rating, as: 'existingRating', attributes: ['ID', 'NAME'] },
@@ -309,7 +310,7 @@ async function getRequestEmailModel(requestId, dear = '-') {
   });
 
   const { listApprovalHistory } = require('./requestService');
-  const approvalHistory = await listApprovalHistory(requestId);
+  const approvalHistory = await listApprovalHistory(requestId, ...(transaction ? [{ transaction }] : []));
   return mapRequestToEmailModel(request, dear, approvalHistory);
 }
 

@@ -25,6 +25,82 @@ send only to the current logged-in tester, with no CC/BCC, including resends and
 View As sessions. If an email action has no logged-in tester context in DEV/QAS,
 the notification is not sent; it never falls back to the audit mailbox.
 
+## Email Reminders
+
+Before deploying this feature, run
+[`database/migrations/20261016_add_email_reminders.sql`](database/migrations/20261016_add_email_reminders.sql)
+against each environment's database. The script is transactional and rerunnable;
+it preserves existing configuration and delivery state. No automatic schema sync
+or migration is performed by the API.
+
+The migration creates:
+
+- `EMAIL_REMINDER_CONFIGS`: the requested audit columns (`ID VARCHAR(128)`,
+  `CREATED_DATE`, `UPDATED_DATE`, `CREATED_BY`, `UPDATED_BY`, `ENABLED DEFAULT 1`,
+  nullable `SORTING`), plus unique `TEMPLATE`, `INTERVAL_VALUE`, `INTERVAL_UNIT`.
+- `EMAIL_REMINDER_STATES`: durable per-request/template/approval delivery state,
+  including `SOURCE_EMAIL_ID`, `LAST_SENT_DATE`, `LAST_ATTEMPT_DATE`, `SENT_COUNT`
+  and `LAST_ERROR`. This prevents a service restart from resetting reminder rounds.
+  Audit employee code `0` denotes the automatic scheduler and migration seed.
+
+Reminder audit and delivery timestamps are written with SQL Server `GETDATE()`.
+Keep these writes database-side: Sequelize serializes JavaScript `Date` values
+with a timezone suffix, which is incompatible with the existing `DATETIME` columns.
+
+All four initial settings are deliberately **disabled**, with a one-day interval.
+System Admin / Super User can configure them in **Administration > Email Reminders**.
+Each template has an enable checkbox and a whole-number interval (1-365) in minutes,
+hours or days. Saving affects the next scheduler check; no restart is needed.
+Enabling a template includes already-overdue eligible historical logs, so review
+the backlog before enabling it in PRD.
+
+| Template | Initial timer | Stops when |
+| --- | --- | --- |
+| `request-approval.hbs` | Original successful email delivery; Save alone does not reset the timer | The specific approver approves/rejects/sends backward, leaves the current pending step/cycle, or request leaves Waiting Approval |
+| `request-backward.hbs` | Latest current-cycle Backward approval `UPDATED_DATE`, including disabled approval history | Request leaves Draft (resubmit/cancel); editing alone does not stop/reset it |
+| `request-draft.hbs` | `REQUESTS.UPDATED_DATE`; edits restart the timer | Request leaves Draft; returned drafts use Backward instead |
+| `request-final.hbs` | Latest current-cycle Approved approval `UPDATED_DATE` | Request leaves Final (complete/cancel); editing alone does not stop/reset it |
+
+Only successful original email logs in the active environment are sources.
+Reminders and manual resends are not new reminder sources. The latest original
+log per request/template is used (per approval ID for approval emails, including
+parallel approvers). The original To/CC/BCC and base subject are reused, current
+request content is rebuilt, and approval action links are freshly signed.
+Reminder subjects start with `Reminder!! [e-Credit]`, `Reminder!! [QAS e-Credit]`
+or `Reminder!! [DEV e-Credit]`, followed by the original subject text. The four
+reminder templates render a red `Reminder!!` banner only when the email service
+sets `isReminder` from automatic reminder metadata. Ordinary workflow emails and
+ordinary manual resends do not display the banner. Resending a reminder from
+Email Logs preserves its reminder metadata and presentation.
+DEV/QAS reuse only the single original To recipient from the log, without CC/BCC
+(legacy CC/BCC entries are discarded rather than blocking delivery); they
+never send to a real approver as a fallback. Historical approval logs use their
+signed action links to identify the approver even after token expiry; logs with
+missing/invalid approval identity are skipped with an explicit server error log.
+Drafts without an original draft email log are intentionally not mailed; this
+feature does not introduce an initial draft-email sender.
+
+The API worker checks approximately every minute while the process is running.
+Reminders repeat without a maximum until the stop condition applies, with one
+configured interval after each successful send or failed attempt. Downtime does
+not cause catch-up bursts. Results are written to Email Logs with `resendOf` and
+`reminderContext.automatic`; detailed failure/cooldown state is persisted in
+`EMAIL_REMINDER_STATES`. Scheduler/configuration/database errors are also logged
+by the standard server logger.
+
+Multiple instances coordinate via SQL Server `sys.sp_getapplock` inside a
+per-reminder transaction, rechecking configuration, eligibility and durable
+state after acquiring the lock. The database user needs permission to execute
+`sys.sp_getapplock`. Scheduler runs do not overlap within a process, and graceful
+shutdown stops the worker before closing the database. As with SMTP generally,
+delivery is at-least-once: a process/database failure after SMTP acceptance but
+before committing state can cause a duplicate on a later check.
+
+The administration API uses the standard authentication and admin-role checks:
+`GET /<env>/api/email-reminders` and
+`PATCH /<env>/api/email-reminders/:template`, with body
+`{ "enabled": true, "intervalValue": 2, "intervalUnit": "days" }`.
+
 ## Windows Service Setup (NSSM)
 
 The application is managed as a Windows service using NSSM (Node Service Manager).

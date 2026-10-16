@@ -2,6 +2,24 @@ const { getModels } = require('../models');
 const emailLogService = require('../services/emailLogService');
 const { sendEmail } = require('../services/emailService');
 const { getRequestEmailModel } = require('../services/requestEmailModelService');
+const { isAdminRole } = require('../helpers/roleAuthorization');
+
+async function listAllEmails(req, res, next) {
+  try {
+    const profile = req.user?.profile;
+    if (!isAdminRole(profile?.ROLE, profile?.ROLE_ID)) {
+      const error = new Error('Only the System Admin or Super User role can access all email logs.');
+      error.statusCode = 403;
+      error.code = 'FORBIDDEN';
+      throw error;
+    }
+    const data = await emailLogService.listAllEmailLogs(req.query);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.status(200).json({ success: true, data, correlationId: res.locals.correlationId || 'N/A' });
+  } catch (error) {
+    next(error);
+  }
+}
 
 function requestNotFound() {
   const error = new Error('Request was not found.');
@@ -75,6 +93,7 @@ async function resendRequestEmails(req, res, next) {
           requestId: req.params.requestId,
           user: req.user,
           resendOf: emailLog.ID,
+          reminderContext: sendParameters.reminderContext,
         });
         results.push({ id: emailLog.ID, success: true, providerMessageId: result.messageId || null });
       } catch (error) {
@@ -87,4 +106,4 @@ async function resendRequestEmails(req, res, next) {
   }
 }
 
-module.exports = { listRequestEmails, getRequestEmail, resendRequestEmails };
+module.exports = { listAllEmails, listRequestEmails, getRequestEmail, resendRequestEmails };

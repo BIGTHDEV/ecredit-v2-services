@@ -67,6 +67,8 @@ describe('parallel workflow notifications', () => {
     });
 
     expect(sendRequestWorkflowEmail).toHaveBeenCalledTimes(2);
+    expect(sendRequestWorkflowEmail.mock.calls.map(([options]) => options.reminderContext))
+      .toEqual([{ approvalId: 'first' }, { approvalId: 'second' }]);
     expect(createWorkflowNotifications).toHaveBeenCalledTimes(1);
     expect(createWorkflowNotifications.mock.calls[0][0]).toMatchObject({
       event: 'submit',

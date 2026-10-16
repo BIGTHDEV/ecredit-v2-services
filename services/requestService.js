@@ -490,7 +490,7 @@ async function findPreviousFinancialStatementYear(Request, currentRequest) {
   return Number.isInteger(year) && year > 0 ? String(year) : null;
 }
 
-async function listApprovalHistory(requestId, { includeDisabledApprovals = false } = {}) {
+async function listApprovalHistory(requestId, { includeDisabledApprovals = false, transaction } = {}) {
   const approvalHistoryOrder = includeDisabledApprovals
     ? 'UPDATED_AT DESC, SORTING ASC'
     : 'SORTING ASC';
@@ -621,6 +621,7 @@ async function listApprovalHistory(requestId, { includeDisabledApprovals = false
     {
       replacements: { requestId, includeDisabledApprovals: includeDisabledApprovals ? 1 : 0 },
       type: QueryTypes.SELECT,
+      ...(transaction ? { transaction } : {}),
     },
   );
 }

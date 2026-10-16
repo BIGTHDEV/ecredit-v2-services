@@ -19,6 +19,35 @@ function createTransporter() {
 
 describe('emailService', () => {
   test.each([
+    ['dev', 'Reminder!! [DEV e-Credit] - Subject'],
+    ['qas', 'Reminder!! [QAS e-Credit] - Subject'],
+    ['prd', 'Reminder!! [e-Credit] - Subject'],
+  ])('marks only reminder subjects and template context in %s', async (environment, subject) => {
+    const transporter = createTransporter();
+    await createEmailService({ environment, transporter }).sendEmail({
+      template: 'request-approval', subject: 'Subject', model,
+      actorEmail: 'tester@example.com',
+      recipients: { to: ['recipient@example.com'] },
+      reminderContext: { automatic: true, sourceEmailId: 'source' },
+    });
+    const sent = transporter.sendMail.mock.calls[0][0];
+    expect(sent.subject).toBe(subject);
+    expect(sent.context.isReminder).toBe(true);
+    if (environment !== 'prd') expect(sent.context.emailDebugInfo.subject).toBe(subject);
+  });
+
+  test.each([undefined, { approvalId: 'approval' }, { automatic: false }])('does not mark normal emails or manual resends as reminders: %j', async (reminderContext) => {
+    const transporter = createTransporter();
+    await createEmailService({ environment: 'dev', transporter }).sendEmail({
+      template: 'request-approval', subject: 'Subject', model: { ...model, isReminder: true },
+      actorEmail: 'tester@example.com', resendOf: 'source', reminderContext,
+    });
+    const sent = transporter.sendMail.mock.calls[0][0];
+    expect(sent.subject).toBe('[DEV e-Credit] - Subject');
+    expect(sent.context.isReminder).toBe(false);
+  });
+
+  test.each([
     ['dev', '[DEV e-Credit] - Subject'],
     ['qas', '[QAS e-Credit] - Subject'],
     ['prd', '[e-Credit] - Subject'],

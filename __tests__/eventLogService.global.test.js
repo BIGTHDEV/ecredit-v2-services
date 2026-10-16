@@ -136,11 +136,11 @@ describe('global event logs', () => {
     expect(Log.findAndCountAll.mock.calls[0][0].order).toEqual([['CREATED_DATE', 'DESC']]);
   });
 
-  it('does not record reads of the global event-log API as new events', async () => {
+  it.each(['event-logs', 'email-logs'])('does not record reads of the global %s API as new events', async (path) => {
     await persistRequestEvent({
       req: {
         method: 'GET',
-        originalUrl: '/dev/api/requests/event-logs?page=1&pageSize=25',
+        originalUrl: `/dev/api/requests/${path}?page=1&pageSize=25`,
         user: { profile: { CODE: 123 } },
       },
       res: { statusCode: 200, locals: {} },

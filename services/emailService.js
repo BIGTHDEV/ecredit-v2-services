@@ -130,7 +130,7 @@ function resolveTemplate(template) {
 }
 
 function createEmailService({ environment = config.environment, bcc = config.email.bcc, transporter } = {}) {
-  async function sendEmail({ template, subject, model, recipients, actorEmail, requestId, user, resendOf, effectiveRecipients, effectiveBcc, intendedRecipients, auditActorCode }) {
+  async function sendEmail({ template, subject, model, recipients, actorEmail, requestId, user, resendOf, effectiveRecipients, effectiveBcc, intendedRecipients, auditActorCode, reminderContext, transaction }) {
     const normalizedEnvironment = String(environment).toLowerCase();
     if (!SUPPORTED_ENVIRONMENTS.has(normalizedEnvironment)) throw new Error('Unsupported email environment.');
     if (missingValue(subject)) throw new Error('subject is required.');
@@ -144,9 +144,10 @@ function createEmailService({ environment = config.environment, bcc = config.ema
     const bccRecipients = normalizedEnvironment === 'prd' ? (effectiveBcc || normalizeEmailList(bcc, 'bcc')) : [];
     if (normalizedEnvironment === 'prd' && !bccRecipients.length) throw new Error('EMAIL_BCC is required.');
 
-    const normalizedModel = normalizeModel(model);
-    const emailSubject = `${subjectPrefix(normalizedEnvironment)} - ${String(subject).trim()}`;
-    const emailPayload = { requestId, user, auditActorCode, environment: normalizedEnvironment, template: resolvedTemplate, baseSubject: String(subject).trim(), subject: emailSubject, model: normalizedModel, recipients: resolvedRecipients, bcc: bccRecipients, resendOf };
+    const isReminder = reminderContext?.automatic === true;
+    const normalizedModel = { ...normalizeModel(model), isReminder };
+    const emailSubject = `${isReminder ? 'Reminder!! ' : ''}${subjectPrefix(normalizedEnvironment)} - ${String(subject).trim()}`;
+    const emailPayload = { requestId, user, auditActorCode, environment: normalizedEnvironment, template: resolvedTemplate, baseSubject: String(subject).trim(), subject: emailSubject, model: normalizedModel, recipients: resolvedRecipients, bcc: bccRecipients, resendOf, reminderContext, transaction };
     const debugRecipients = intendedRecipients || recipients || resolvedRecipients;
     const templateDebugRecipients = {
       to: normalizeEmailList(debugRecipients.to, 'intendedRecipients.to'),
@@ -163,8 +164,8 @@ function createEmailService({ environment = config.environment, bcc = config.ema
     };
     let emailLog = null;
     if (requestId && isModelsInitialized()) emailLog = await createEmailLog({ ...emailPayload, status: 'PENDING' });
-    const mailTransporter = transporter || await getEmailTransporter();
     try {
+      const mailTransporter = transporter || await getEmailTransporter();
       const result = await mailTransporter.sendMail({ from: config.email.from, to: resolvedRecipients.to, cc: resolvedRecipients.cc, bcc: bccRecipients, subject: emailPayload.subject, template: resolvedTemplate, context: templateContext });
       if (emailLog) await updateEmailLog(emailLog, { ...emailPayload, status: 'SENT', providerResult: result });
       return result;

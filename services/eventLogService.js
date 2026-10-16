@@ -20,7 +20,7 @@ function requestIdFromPath(requestPath) {
 function isEventLogReadRequest(method, requestPath) {
   return (
     String(method).toUpperCase() === 'GET' &&
-    /\/requests\/(?:event-logs(?:\/[^/?]+)?|[^/?]+\/event-logs(?:\/[^/?]+)?)\/?(?:\?.*)?$/i.test(String(requestPath || ''))
+    /\/requests\/(?:(?:event-logs|email-logs)(?:\/[^/?]+)?|[^/?]+\/event-logs(?:\/[^/?]+)?)\/?(?:\?.*)?$/i.test(String(requestPath || ''))
   );
 }
 

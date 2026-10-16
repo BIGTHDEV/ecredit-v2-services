@@ -11,6 +11,7 @@ const userRoute = require('./userRoute');
 const approverRoute = require('./approverRoute');
 const emailApprovalRoute = require('./emailApprovalRoute');
 const notificationRoute = require('./notificationRoute');
+const emailReminderRoute = require('./emailReminderRoute');
 
 /**
  * Shared API Route Aggregator
@@ -36,5 +37,6 @@ router.use('/health', healthRoute);
 router.use('/docs', docsRoute);
 router.use('/email-approval', emailApprovalRoute);
 router.use('/notifications', notificationRoute);
+router.use('/email-reminders', emailReminderRoute);
 
 module.exports = router;

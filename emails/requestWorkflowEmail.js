@@ -11,6 +11,7 @@ function sendRequestWorkflowEmail({
   requestId,
   user,
   auditActorCode,
+  reminderContext,
 }) {
   return createEmailService({ environment, transporter }).sendEmail({
     template,
@@ -22,6 +23,7 @@ function sendRequestWorkflowEmail({
     requestId,
     user,
     auditActorCode,
+    reminderContext,
   });
 }
 

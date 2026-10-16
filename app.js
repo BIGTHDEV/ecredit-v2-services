@@ -12,6 +12,7 @@ const corsMiddleware = require('./middlewares/cors');
 const requestLoggerMiddleware = require('./middlewares/requestLogger');
 const errorHandlerMiddleware = require('./middlewares/errorHandler');
 const environmentRouter = require('./routes');
+const { startEmailReminderScheduler } = require('./services/emailReminderService');
 
 /**
  * Express Server Application
@@ -140,6 +141,7 @@ app.use(errorHandlerMiddleware);
  */
 let server;
 let isShuttingDown = false;
+let stopEmailReminderScheduler;
 
 async function startServer() {
   try {
@@ -172,6 +174,8 @@ async function startServer() {
 
       if (process.env.STARTUP_CHECK_ONLY === 'true') {
         gracefulShutdown('startup check completed');
+      } else {
+        stopEmailReminderScheduler = startEmailReminderScheduler();
       }
     });
   } catch (error) {
@@ -194,6 +198,11 @@ async function gracefulShutdown(signal) {
   logger.info(`Received ${signal}, starting graceful shutdown...`);
 
   try {
+    setTimeout(() => {
+      logger.error('Forced shutdown due to timeout');
+      process.exit(1);
+    }, 30000);
+    if (stopEmailReminderScheduler) await stopEmailReminderScheduler();
     // Close HTTPS server
     if (server) {
       server.close(async () => {
@@ -207,11 +216,6 @@ async function gracefulShutdown(signal) {
         process.exit(0);
       });
 
-      // Force shutdown after 30 seconds
-      setTimeout(() => {
-        logger.error('Forced shutdown due to timeout');
-        process.exit(1);
-      }, 30000);
     }
   } catch (error) {
     logger.error(`Error during shutdown: ${error.message}`);

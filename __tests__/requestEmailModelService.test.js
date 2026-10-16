@@ -22,6 +22,15 @@ const {
 } = require('../services/requestEmailModelService');
 
 describe('requestEmailModelService', () => {
+  test('reuses the scheduler transaction for request content and approval history', async () => {
+    const transaction = { id: 'reminder-transaction' };
+    const Request = { findOne: jest.fn().mockResolvedValue({ ID: 'request-1' }) };
+    getModels.mockReturnValue({ Request });
+    await getRequestEmailModel('request-1', 'Recipient', { transaction });
+    expect(Request.findOne).toHaveBeenCalledWith(expect.objectContaining({ transaction }));
+    expect(listApprovalHistory).toHaveBeenCalledWith('request-1', { transaction });
+  });
+
   test('builds the request link from the environment base URL and request ID', () => {
     expect(buildRequestLink('request-1')).toBe('https://ecredit-qas.bigth.com/all-requests/request-1?tab=approver');
   });

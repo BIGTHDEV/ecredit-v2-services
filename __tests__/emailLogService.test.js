@@ -3,11 +3,60 @@
 jest.mock('../models', () => ({ getModels: jest.fn() }));
 
 const { getModels } = require('../models');
-const { buildDescription, parseDescription, sanitizeValue, createEmailLog, updateEmailLog, listEmailLogs } = require('../services/emailLogService');
+const { buildDescription, parseDescription, sanitizeValue, createEmailLog, updateEmailLog, listEmailLogs, toEmailSummary } = require('../services/emailLogService');
 
 describe('emailLogService', () => {
+  test.each([0, null, undefined])('labels automatic reminders without an employee actor (updated by %s)', (UPDATED_BY) => {
+    const record = {
+      UPDATED_BY,
+      DESCRIPTION: buildDescription({ status: 'SENT', reminderContext: { automatic: true } }),
+    };
+    expect(toEmailSummary(record).actor).toBe('System (Auto Reminder)');
+  });
+
+  test('keeps the employee name when a user resends an automatic reminder', () => {
+    const record = {
+      UPDATED_BY: 123,
+      updatedByEmployee: { INITIALS: 'AB', USERNAME: 'User' },
+      DESCRIPTION: buildDescription({ status: 'SENT', reminderContext: { automatic: true } }),
+    };
+    expect(toEmailSummary(record).actor).toBe('AB-User');
+  });
+
+  test('does not mislabel a user resend with an unresolved employee as automatic', () => {
+    expect(toEmailSummary({
+      UPDATED_BY: 123,
+      DESCRIPTION: buildDescription({ status: 'SENT', reminderContext: { automatic: true } }),
+    }).actor).toBeNull();
+  });
+
+  test.each([{}, { reminderContext: { automatic: false } }])('keeps the missing actor for non-automatic emails', (payload) => {
+    expect(toEmailSummary({ UPDATED_BY: 0, DESCRIPTION: JSON.stringify(payload) }).actor).toBeNull();
+  });
+
+  test.each([
+    { reminderContext: { automatic: true } },
+    { displayPayload: { reminderContext: { automatic: true } } },
+  ])('recognizes legacy automatic reminder metadata', (payload) => {
+    expect(toEmailSummary({ UPDATED_BY: 0, DESCRIPTION: JSON.stringify(payload) }).actor).toBe('System (Auto Reminder)');
+  });
+
   beforeEach(() => {
     getModels.mockReset();
+  });
+
+  test('uses the scheduler transaction for both email log writes', async () => {
+    const transaction = { id: 'reminder-transaction' };
+    const emailLog = { update: jest.fn() };
+    const Email = {
+      sequelize: { literal: (value) => value },
+      create: jest.fn().mockResolvedValue(emailLog),
+    };
+    getModels.mockReturnValue({ Email });
+    await createEmailLog({ status: 'PENDING', subject: 'Reminder', transaction });
+    await updateEmailLog(emailLog, { status: 'SENT', subject: 'Reminder', transaction });
+    expect(Email.create).toHaveBeenCalledWith(expect.anything(), { transaction });
+    expect(emailLog.update).toHaveBeenCalledWith(expect.anything(), { transaction });
   });
 
   test.each([

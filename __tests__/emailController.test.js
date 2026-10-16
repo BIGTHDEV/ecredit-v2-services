@@ -38,3 +38,27 @@ test('resend uses the active email service and current user, not the logged envi
   expect(sendEmail.mock.calls[0][0]).not.toHaveProperty('environment');
   expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 });
+
+test('resending a reminder preserves its presentation metadata and original base subject', async () => {
+  getModels.mockReturnValue({ Request: { findOne: jest.fn().mockResolvedValue({ ID: 'request-1' }) } });
+  emailLogService.findEmailLogs.mockResolvedValue([{ ID: 'reminder-1' }]);
+  const reminderContext = { automatic: true, sourceEmailId: 'original-1', approvalId: 'approval-1' };
+  emailLogService.parseDescription.mockReturnValue({ sendParameters: {
+    template: 'request-approval', baseSubject: 'Approval',
+    subject: 'Reminder!! [DEV e-Credit] - Approval', reminderContext,
+    recipients: { to: ['tester@example.com'], cc: [] }, bcc: [],
+  } });
+  getRequestEmailModel.mockResolvedValue({ companyName: 'Current request' });
+  sendEmail.mockResolvedValue({ messageId: 'resent-reminder' });
+  const req = {
+    params: { requestId: 'request-1' }, body: { emailIds: ['reminder-1'] },
+    user: { email: 'tester@example.com' },
+  };
+  const res = { locals: {}, status: jest.fn().mockReturnThis(), json: jest.fn() };
+  const next = jest.fn();
+  await resendRequestEmails(req, res, next);
+  expect(next).not.toHaveBeenCalled();
+  expect(sendEmail).toHaveBeenLastCalledWith(expect.objectContaining({
+    subject: 'Approval', reminderContext, resendOf: 'reminder-1', requestId: 'request-1',
+  }));
+});

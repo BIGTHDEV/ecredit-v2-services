@@ -34,6 +34,7 @@ router.get('/ratings', authenticationMiddleware, requestMetadataController.listE
 router.get('/terms', authenticationMiddleware, requestMetadataController.listTerms);
 router.get('/event-logs', authenticationMiddleware, eventLogController.listAllEvents);
 router.get('/event-logs/:logId', authenticationMiddleware, eventLogController.getAllEvent);
+router.get('/email-logs', authenticationMiddleware, emailController.listAllEmails);
 router.get('/:requestId/event-logs', authenticationMiddleware, eventLogController.listRequestEvents);
 router.get('/:requestId/event-logs/:logId', authenticationMiddleware, eventLogController.getRequestEvent);
 router.get('/:requestId/emails', authenticationMiddleware, emailController.listRequestEmails);

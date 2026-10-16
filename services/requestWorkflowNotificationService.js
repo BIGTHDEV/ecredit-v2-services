@@ -281,6 +281,7 @@ async function sendRequestWorkflowNotification({ event, requestId, environment, 
             requestId,
             user,
             auditActorCode,
+            reminderContext: { approvalId: approver.ID },
         });
     }));
 }
@@ -309,4 +310,5 @@ module.exports = {
     buildRejectedSubject,
     sendRequestWorkflowNotification,
     notifyBestEffort,
+    approvalActionsFor,
 };
