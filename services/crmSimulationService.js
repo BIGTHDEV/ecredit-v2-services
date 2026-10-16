@@ -1,4 +1,6 @@
 const config = require('../config/env');
+const { randomBytes } = require('crypto');
+const { getModels } = require('../models');
 
 const ALLOWED_FIELDS = [
   'CRM_ID', 'CRM_NO', 'DESCRIPTION', 'SOLD_ID', 'SOLD_TO', 'REQUESTED_BY', 'SUBMITTED_BY',
@@ -10,6 +12,7 @@ const ALLOWED_FIELDS = [
   'IS_TERM_REQUESTED', 'IS_LIMIT_REQUESTED',
 ];
 const TIMEOUT_MS = 30000;
+const CRM_ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
 function createError(message, statusCode, code) {
   const error = new Error(message);
@@ -27,6 +30,64 @@ function buildPayload(body) {
     if (body[field] !== undefined && body[field] !== null) payload[field] = body[field];
   });
   return payload;
+}
+
+function createCrmId() {
+  const bytes = randomBytes(18);
+  return Array.from(bytes, (byte) => CRM_ID_ALPHABET[byte % CRM_ID_ALPHABET.length]).join('');
+}
+
+async function generateSimulationIdentifiers({
+  Request = getModels().Request,
+  createId = createCrmId,
+} = {}) {
+  const requests = await Request.findAll({
+    attributes: ['CRM_ID', 'CRM_NO'],
+    raw: true,
+  });
+  const existingIds = new Set(
+    requests.map((request) => String(request.CRM_ID || '').trim().toUpperCase()).filter(Boolean),
+  );
+
+  let crmId = '';
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const candidate = createId();
+    if (candidate && !existingIds.has(candidate.toUpperCase())) {
+      crmId = candidate;
+      break;
+    }
+  }
+  if (!crmId) {
+    const error = new Error('Unable to generate a unique CRM ID. Please try again.');
+    error.statusCode = 503;
+    error.code = 'CRM_SIMULATION_ID_GENERATION_FAILED';
+    throw error;
+  }
+
+  let latestCrmNo = '';
+  let latestSequence = 0n;
+  for (const request of requests) {
+    const value = String(request.CRM_NO || '').trim();
+    const match = /^(.*?)(\d+)$/.exec(value);
+    if (!match) continue;
+    const sequence = BigInt(match[2]);
+    if (sequence > latestSequence) {
+      latestCrmNo = value;
+      latestSequence = sequence;
+    }
+  }
+
+  let crmNo;
+  if (latestCrmNo) {
+    const match = /^(.*?)(\d+)$/.exec(latestCrmNo);
+    const nextSequence = (latestSequence + 1n).toString();
+    crmNo = `${match[1]}${nextSequence.padStart(Math.max(match[2].length, nextSequence.length), '0')}`;
+  } else {
+    const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    crmNo = `CN-${dateStamp}001`;
+  }
+
+  return { CRM_ID: crmId, CRM_NO: crmNo };
 }
 
 // Test-only helper: posts a CRM-style "create request" call to the configured endpoint.
@@ -58,4 +119,9 @@ async function simulateCreateRequest(body, { environment = config.environment, s
   return { status: response.status, ok: response.ok, response: data };
 }
 
-module.exports = { simulateCreateRequest, buildPayload, ALLOWED_FIELDS };
+module.exports = {
+  simulateCreateRequest,
+  generateSimulationIdentifiers,
+  buildPayload,
+  ALLOWED_FIELDS,
+};

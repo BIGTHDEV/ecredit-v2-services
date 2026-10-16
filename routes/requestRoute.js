@@ -24,6 +24,7 @@ const companyInfoLookupLimiter = rateLimit({
 });
 
 if (!config.isProduction()) {
+  router.get('/simulate-crm-request/identifiers', authenticationMiddleware, crmSimulationController.getSimulationIdentifiers);
   router.post('/simulate-crm-request', authenticationMiddleware, crmSimulationController.simulateCrmRequest);
 }
 router.get('/', authenticationMiddleware, requestController.listRequests);
