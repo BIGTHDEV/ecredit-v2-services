@@ -7,7 +7,7 @@ Express.js backend service for e-Credit application with:
 - HTTPS with certificate-based security
 - Comprehensive logging with daily rotation
 - Swagger/OpenAPI 3.x documentation
-- Environment-specific route isolation
+- Shared controllers and routes with environment-specific API prefixes
 
 ## Quick Start
 
@@ -69,6 +69,13 @@ Each environment uses a dedicated `.env` file:
 - `.env.qas` - QAS/Staging configuration
 - `.env.prd` - Production configuration
 
+`npm run start:<env>` sets `NODE_ENV` and loads the matching file through
+`config/env.js`. Shared controllers and routes do not select database connections.
+`config/database.js` creates one Sequelize connection per process from the active
+`DB_SERVER`, `DB_INSTANCE_NAME`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, TLS,
+and pool settings. Existing process environment variables take precedence over the
+file, so deployment services must not inherit database settings from another environment.
+
 **Do not commit .env files to Git** - they are in `.gitignore`
 
 Copy `.env.example` and update with actual values:
@@ -82,6 +89,66 @@ DB_USER=sa
 DB_PASSWORD=<actual_password>
 # ... other required variables
 ```
+
+### AI-assisted customer information suggestions
+
+The Customers tab can use a 13-digit Tax ID to suggest registered date, registered
+capital, external customer type, official signatories, and major shareholders. The
+search is server-side, available only to an authenticated participant or System Admin
+on a draft request, and returns suggestions with source links for review. Existing
+form values are not selected for replacement by default; applying registered capital
+uses the normal customer-field update so the customer Size is recalculated. The user
+must still save customer information to persist any applied suggestions.
+
+This feature sends a prompt containing the Tax ID to a Power Platform flow. Configure
+the flow URL in the deployment secret store or environment-specific settings:
+
+```bash
+POWERPLATFORM_URL=<HTTPS URL of the Power Automate flow trigger>
+```
+
+The URL can contain a signed trigger token, so treat it as a secret and never commit
+it or write it to logs. The backend sends a request with this shape:
+
+```json
+{
+  "Prompt": "<generated prompt>",
+  "userEmail": "<authenticated user's email>",
+  "userName": "<authenticated user's username>",
+  "Application": "eCredit",
+  "Module": "Main",
+  "Remark": "<ENV>|Company information lookup by Tax ID"
+}
+```
+
+The flow must return either a JSON object or a JSON string with this shape. If the
+Power Platform response wraps the AI output in a `text` property, that property may
+contain the JSON string:
+
+```json
+{
+  "fields": {
+    "registeredDate": { "value": "YYYY-MM-DD or null", "evidence": "text or null" },
+    "registeredCapitalAmount": { "value": "digits only or null", "evidence": "text or null" },
+    "customerTypeExternal": { "value": "text or null", "evidence": "text or null" },
+    "officialSignatory": { "value": "text or null", "evidence": "text or null" },
+    "majorShareholders": { "value": "text or null", "evidence": "text or null" }
+  },
+  "sources": [{ "title": "Source name", "url": "https://..." }]
+}
+```
+
+Configure the Power Automate HTTP trigger and response action to use this contract.
+The `sources` array must contain at least one source actually opened during lookup,
+with a title and a real HTTPS URL. Do not fabricate URLs. If no company fields can be
+verified, return null values for those fields but still include the sources that were
+checked. The backend rejects responses without a verifiable HTTPS source link.
+The flow must have an approved way to look up public company records; sending a prompt
+to an AI model alone doesn't provide web search.
+Ensure the organization's Power Platform licensing, connector permissions, and data
+policies cover the flow's AI and search actions. The flow URL is read from
+`POWERPLATFORM_URL` in the active environment configuration. Never put it in source
+control or logs.
 
 ### Registered capital amount
 
@@ -161,9 +228,13 @@ and the previous actioned step shown for decision support).
 
 Recipient policy:
 
-- DEV/QAS always send `To` to the authenticated actor email (`req.user.email`) and leave `CC` empty.
+- DEV/QAS send only to the logged-in tester (`req.user.profile.LOGGED_IN_EMAIL`, or
+  `req.user.email`), never the View As user. Both `CC` and `BCC` are empty.
+- DEV/QAS reject delivery if no tester email is available; `EMAIL_BCC` is not a fallback.
 - PRD accepts `recipients: { to: string[], cc: string[] }` from the caller.
-- Every environment always adds `EMAIL_BCC`.
+- Only PRD adds `EMAIL_BCC`.
+- Resending uses the current runtime environment and current logged-in tester, not
+  the environment or tester stored in an old email log. PRD retains logged recipients.
 - Subjects are prefixed as `[DEV e-Credit]`, `[QAS e-Credit]`, or `[e-Credit]`.
 
 For request data, `services/requestEmailModelService.js` exposes
@@ -187,6 +258,11 @@ npm run start:prd    # PORT 3035, NODE_ENV=prd
 - `NODE_ENV=prd` exposes only `/prd/api/*`
 
 Cross-environment routes return 404.
+
+All environments use the same files directly under `controllers/` and `routes/`.
+`routes/api.js` aggregates the shared API and `routes/index.js` mounts it at the
+active prefix. CRM simulation remains available only in DEV/QAS. There are no
+environment-specific controller or route folders.
 
 ## API Endpoints
 

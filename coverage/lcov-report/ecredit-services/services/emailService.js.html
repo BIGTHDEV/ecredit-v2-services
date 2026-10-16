@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/82</span>
+                <span class='fraction'>0/80</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/79</span>
+                <span class='fraction'>0/81</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/68</span>
+                <span class='fraction'>0/66</span>
             </div>
         
             
@@ -252,8 +252,7 @@
 <a name='L187'></a><a href='#L187'>187</a>
 <a name='L188'></a><a href='#L188'>188</a>
 <a name='L189'></a><a href='#L189'>189</a>
-<a name='L190'></a><a href='#L190'>190</a>
-<a name='L191'></a><a href='#L191'>191</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L190'></a><a href='#L190'>190</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -367,8 +366,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -394,6 +391,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -552,12 +550,10 @@ function <span class="fstat-no" title="function not covered" >subjectPrefix(</sp
   }[environment];
 }
 &nbsp;
-function <span class="fstat-no" title="function not covered" >resolveRecipients(</span>environment, recipients = <span class="branch-0 cbranch-no" title="branch not covered" >{},</span> actorEmail, fallbackEmail) {
+function <span class="fstat-no" title="function not covered" >resolveRecipients(</span>environment, recipients = <span class="branch-0 cbranch-no" title="branch not covered" >{},</span> actorEmail) {
 <span class="cstat-no" title="statement not covered" >  if (environment === 'dev' || environment === 'qas') {</span>
-    const recipientSource = <span class="cstat-no" title="statement not covered" >actorEmail || fallbackEmail;</span>
-    const recipientField = <span class="cstat-no" title="statement not covered" >actorEmail ? 'actorEmail' : 'bcc';</span>
-    const recipientsForEnvironment = <span class="cstat-no" title="statement not covered" >normalizeEmailList(recipientSource, recipientField);</span>
-<span class="cstat-no" title="statement not covered" >    if (!recipientsForEnvironment.length) <span class="cstat-no" title="statement not covered" >throw new Error(`actorEmail or EMAIL_BCC is required for ${environment.toUpperCase()} email.`);</span></span>
+    const recipientsForEnvironment = <span class="cstat-no" title="statement not covered" >normalizeEmailList(actorEmail, 'actorEmail');</span>
+<span class="cstat-no" title="statement not covered" >    if (recipientsForEnvironment.length !== 1) <span class="cstat-no" title="statement not covered" >throw new Error(`A single actorEmail is required for ${environment.toUpperCase()} email.`);</span></span>
 <span class="cstat-no" title="statement not covered" >    return { to: recipientsForEnvironment, cc: [] };</span>
   }
 &nbsp;
@@ -583,12 +579,13 @@ function <span class="fstat-no" title="function not covered" >createEmailService
 <span class="cstat-no" title="statement not covered" >    if (missingValue(subject)) <span class="cstat-no" title="statement not covered" >throw new Error('subject is required.');</span></span>
 &nbsp;
     const resolvedTemplate = <span class="cstat-no" title="statement not covered" >resolveTemplate(template);</span>
-    const resolveActorEmail = <span class="cstat-no" title="statement not covered" >normalizedEnvironment === 'prd' ? actorEmail : (user?.profile?.LOGGED_IN_EMAIL || actorEmail);</span>
+    const resolveActorEmail = <span class="cstat-no" title="statement not covered" >normalizedEnvironment === 'prd' ? actorEmail</span>
+      : (user ? (user.profile?.LOGGED_IN_EMAIL || user.email) : actorEmail);
     const resolvedRecipients = <span class="cstat-no" title="statement not covered" >normalizedEnvironment === 'prd'</span>
-      ? (effectiveRecipients || resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail, bcc))
-      : resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail, bcc);
-    const bccRecipients = <span class="cstat-no" title="statement not covered" >effectiveBcc || normalizeEmailList(bcc, 'bcc');</span>
-<span class="cstat-no" title="statement not covered" >    if (!bccRecipients.length) <span class="cstat-no" title="statement not covered" >throw new Error('EMAIL_BCC is required.');</span></span>
+      ? (effectiveRecipients || resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail))
+      : resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail);
+    const bccRecipients = <span class="cstat-no" title="statement not covered" >normalizedEnvironment === 'prd' ? (effectiveBcc || normalizeEmailList(bcc, 'bcc')) : [];</span>
+<span class="cstat-no" title="statement not covered" >    if (normalizedEnvironment === 'prd' &amp;&amp; !bccRecipients.length) <span class="cstat-no" title="statement not covered" >throw new Error('EMAIL_BCC is required.');</span></span>
 &nbsp;
     const normalizedModel = <span class="cstat-no" title="statement not covered" >normalizeModel(model);</span>
     const emailSubject = <span class="cstat-no" title="statement not covered" >`${subjectPrefix(normalizedEnvironment)} - ${String(subject).trim()}`;</span>
@@ -640,7 +637,7 @@ const defaultEmailService = <span class="cstat-no" title="statement not covered"
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-14T15:56:28.979Z
+                at 2026-10-16T08:39:21.626Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

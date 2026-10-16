@@ -92,6 +92,9 @@ const envSchema = Joi.object()
     MSAL_API_CLIENT_ID: Joi.string().guid().required(),
     MSAL_API_SCOPE: Joi.string().required(),
     MSAL_GRAPH_ENDPOINT: Joi.string().uri().required(),
+
+    // Power Platform company information lookup
+    POWERPLATFORM_URL: Joi.string().uri({ scheme: ['https'] }).allow('').optional(),
     
     // Swagger Configuration
     SWAGGER_TITLE: Joi.string().required(),
@@ -255,6 +258,9 @@ module.exports = {
     apiScope: config.MSAL_API_SCOPE,
     graphEndpoint: config.MSAL_GRAPH_ENDPOINT,
   },
+
+  // Power Platform company information lookup
+  powerPlatformUrl: config.POWERPLATFORM_URL || '',
   
   // Swagger
   swagger: {

@@ -8,6 +8,23 @@
 - HTTPS certificates on network share (\\Cloudapp02\d\Certificates\)
 - Service account with appropriate permissions
 
+## Runtime Environment
+
+Deploy the same controller and route structure for every branch. Select the runtime
+with `npm run start:dev`, `npm run start:qas`, or `npm run start:prd`; each command
+loads `.env.dev`, `.env.qas`, or `.env.prd` respectively. NSSM services select the same
+configuration using `NODE_ENV`, as shown below. API prefixes remain `/<env>/api`.
+
+Database selection comes only from the active environment configuration, not folder
+names. Check `DB_SERVER`, `DB_INSTANCE_NAME`, `DB_PORT`, `DB_NAME`, credentials, and
+TLS settings before deployment. Process-level variables override values in the file;
+remove stale database variables inherited from other environments.
+
+PRD sends workflow email to real recipients with the configured audit BCC. DEV/QAS
+send only to the current logged-in tester, with no CC/BCC, including resends and
+View As sessions. If an email action has no logged-in tester context in DEV/QAS,
+the notification is not sent; it never falls back to the audit mailbox.
+
 ## Windows Service Setup (NSSM)
 
 The application is managed as a Windows service using NSSM (Node Service Manager).

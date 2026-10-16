@@ -131,11 +131,14 @@ async function getUserProfileByEmail(email) {
     VIEW_AS_EMAIL: viewAsEmployee ? viewAsEmployee.CURRENT_EMAIL || '' : '',
     LOGGED_IN_CODE: employee.EMP_CODE || '',
     LOGGED_IN_EMAIL: employee.CURRENT_EMAIL || '',
+    LOGGED_IN_INITIALS: employee.INITIALS || '',
+    LOGGED_IN_FULL_NAME: employee.NAME_ENG || '',
     LOGGED_IN_ROLE: role ? role.NAME : null,
     LOGGED_IN_ROLE_ID: role ? role.ID : null,
     EFFECTIVE_CODE: effectiveEmployee.EMP_CODE || '',
     EFFECTIVE_EMAIL: effectiveEmployee.CURRENT_EMAIL || '',
     EFFECTIVE_ROLE: effectiveRole ? effectiveRole.NAME : null,
+    LOGGED_IN_USERNAME: employee.USERNAME || '',
     IS_VIEWING_AS: isViewingAs,
   };
 }

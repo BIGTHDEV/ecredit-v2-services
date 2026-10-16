@@ -64,6 +64,8 @@ describe('userProfileService View As identity', () => {
 
     expect(profile.CODE).toBe('20221459');
     expect(profile.LOGGED_IN_CODE).toBe('20221459');
+    expect(profile.LOGGED_IN_INITIALS).toBe('MU');
+    expect(profile.LOGGED_IN_FULL_NAME).toBe('Main User');
     expect(profile.IS_VIEWING_AS).toBe(false);
   });
 
@@ -84,6 +86,9 @@ describe('userProfileService View As identity', () => {
     expect(profile.CODE).toBe('20261631');
     expect(profile.ROLE).toBe('Credit Analyst');
     expect(profile.LOGGED_IN_CODE).toBe('20221459');
+    expect(profile.LOGGED_IN_USERNAME).toBe('main');
+    expect(profile.LOGGED_IN_INITIALS).toBe('MU');
+    expect(profile.LOGGED_IN_FULL_NAME).toBe('Main User');
     expect(profile.LOGGED_IN_ROLE).toBe('System Admin');
     expect(profile.LOGGED_IN_ROLE_ID).toBe('system-admin-id');
     expect(profile.IS_VIEWING_AS).toBe(true);

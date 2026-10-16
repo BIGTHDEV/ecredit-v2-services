@@ -107,12 +107,10 @@ function subjectPrefix(environment) {
   }[environment];
 }
 
-function resolveRecipients(environment, recipients = {}, actorEmail, fallbackEmail) {
+function resolveRecipients(environment, recipients = {}, actorEmail) {
   if (environment === 'dev' || environment === 'qas') {
-    const recipientSource = actorEmail || fallbackEmail;
-    const recipientField = actorEmail ? 'actorEmail' : 'bcc';
-    const recipientsForEnvironment = normalizeEmailList(recipientSource, recipientField);
-    if (!recipientsForEnvironment.length) throw new Error(`actorEmail or EMAIL_BCC is required for ${environment.toUpperCase()} email.`);
+    const recipientsForEnvironment = normalizeEmailList(actorEmail, 'actorEmail');
+    if (recipientsForEnvironment.length !== 1) throw new Error(`A single actorEmail is required for ${environment.toUpperCase()} email.`);
     return { to: recipientsForEnvironment, cc: [] };
   }
 
@@ -138,12 +136,13 @@ function createEmailService({ environment = config.environment, bcc = config.ema
     if (missingValue(subject)) throw new Error('subject is required.');
 
     const resolvedTemplate = resolveTemplate(template);
-    const resolveActorEmail = normalizedEnvironment === 'prd' ? actorEmail : (user?.profile?.LOGGED_IN_EMAIL || actorEmail);
+    const resolveActorEmail = normalizedEnvironment === 'prd' ? actorEmail
+      : (user ? (user.profile?.LOGGED_IN_EMAIL || user.email) : actorEmail);
     const resolvedRecipients = normalizedEnvironment === 'prd'
-      ? (effectiveRecipients || resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail, bcc))
-      : resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail, bcc);
-    const bccRecipients = effectiveBcc || normalizeEmailList(bcc, 'bcc');
-    if (!bccRecipients.length) throw new Error('EMAIL_BCC is required.');
+      ? (effectiveRecipients || resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail))
+      : resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail);
+    const bccRecipients = normalizedEnvironment === 'prd' ? (effectiveBcc || normalizeEmailList(bcc, 'bcc')) : [];
+    if (normalizedEnvironment === 'prd' && !bccRecipients.length) throw new Error('EMAIL_BCC is required.');
 
     const normalizedModel = normalizeModel(model);
     const emailSubject = `${subjectPrefix(normalizedEnvironment)} - ${String(subject).trim()}`;

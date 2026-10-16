@@ -26,6 +26,7 @@ describe('global event logs', () => {
 
   beforeEach(() => {
     Log = {
+      sequelize: { literal: jest.fn((value) => value) },
       findAndCountAll: jest.fn().mockResolvedValue({ count: 1, rows: [eventLog] }),
       findOne: jest.fn().mockResolvedValue({
         ...eventLog,
@@ -147,5 +148,35 @@ describe('global event logs', () => {
     });
 
     expect(Log.create).not.toHaveBeenCalled();
+  });
+
+  it('persists outbound Power Platform request payloads in the event description', async () => {
+    const outboundRequests = [{
+      system: 'Power Platform',
+      method: 'POST',
+      body: {
+        Prompt: 'Company lookup prompt including the Tax ID.',
+        userEmail: 'actor@example.com',
+        userName: 'ACTOR',
+        Application: 'eCredit',
+        Module: 'Main',
+        Remark: 'DEV|Company information lookup by Tax ID',
+      },
+    }];
+    const req = {
+      method: 'POST',
+      originalUrl: '/dev/api/requests/request-1/customer-info-suggestions',
+      user: { profile: { CODE: 123 } },
+      body: { taxId: '1234567890123' },
+      query: {},
+    };
+    const res = {
+      statusCode: 200,
+      locals: { correlationId: 'correlation-1', outboundRequests },
+    };
+
+    await persistRequestEvent({ req, res, durationMs: 10 });
+
+    expect(JSON.parse(Log.create.mock.calls[0][0].DESCRIPTION).outboundRequests).toEqual(outboundRequests);
   });
 });

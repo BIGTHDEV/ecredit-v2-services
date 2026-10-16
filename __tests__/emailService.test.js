@@ -36,7 +36,7 @@ describe('emailService', () => {
       subject,
       to: environment === 'prd' ? ['recipient@example.com'] : ['actor@example.com'],
       cc: environment === 'prd' ? ['copy@example.com'] : [],
-      bcc: ['audit@example.com'],
+      bcc: environment === 'prd' ? ['audit@example.com'] : [],
       template: 'request-completed',
     }));
     if (environment !== 'prd') {
@@ -97,6 +97,7 @@ describe('emailService', () => {
       model,
       recipients: { to: ['actual-recipient@example.com'], cc: ['copy@example.com'] },
       effectiveRecipients: { to: ['previous-main@example.com'], cc: ['previous-copy@example.com'] },
+      effectiveBcc: ['previous-audit@example.com'],
       actorEmail: 'token-main@example.com',
       user: {
         profile: {
@@ -109,6 +110,7 @@ describe('emailService', () => {
     expect(transporter.sendMail.mock.calls[0][0]).toEqual(expect.objectContaining({
       to: ['main@example.com'],
       cc: [],
+      bcc: [],
     }));
   });
 
@@ -125,6 +127,27 @@ describe('emailService', () => {
       showEmailDebugInfo: true,
       emailDebugInfo: expect.anything(),
     }));
+  });
+
+  test.each(['dev', 'qas'])('prefers the authenticated token email over a viewed actor in %s', async (environment) => {
+    const transporter = createTransporter();
+    await createEmailService({ environment, transporter }).sendEmail({
+      template: 'request-completed', subject: 'Subject', model,
+      user: { email: 'logged-in@example.com', profile: { EMAIL: 'viewed@example.com' } },
+      actorEmail: 'viewed@example.com',
+    });
+    expect(transporter.sendMail).toHaveBeenCalledWith(expect.objectContaining({
+      to: ['logged-in@example.com'], cc: [], bcc: [],
+    }));
+  });
+
+  test.each(['dev', 'qas'])('rejects multiple test recipients in %s', async (environment) => {
+    const transporter = createTransporter();
+    await expect(createEmailService({ environment, transporter }).sendEmail({
+      template: 'request-completed', subject: 'Subject', model,
+      actorEmail: 'tester@example.com,other@example.com',
+    })).rejects.toThrow('single actorEmail');
+    expect(transporter.sendMail).not.toHaveBeenCalled();
   });
 
   test('normalizes omitted fields to dash', async () => {
@@ -145,18 +168,15 @@ describe('emailService', () => {
     }));
   });
 
-  test('uses EMAIL_BCC when DEV/QAS has no session email', async () => {
+  test.each(['dev', 'qas'])('rejects %s without a session email instead of using EMAIL_BCC', async (environment) => {
     const transporter = createTransporter();
-    await createEmailService({ environment: 'qas', transporter }).sendEmail({
+    await expect(createEmailService({ environment, transporter }).sendEmail({
       template: 'request-completed.hbs',
       subject: 'Subject',
       model,
-    });
+    })).rejects.toThrow('actorEmail is required');
 
-    expect(transporter.sendMail).toHaveBeenCalledWith(expect.objectContaining({
-      to: ['audit@example.com'],
-      cc: [],
-    }));
+    expect(transporter.sendMail).not.toHaveBeenCalled();
   });
 
   test('rejects a template outside the allowed .hbs filename format', async () => {

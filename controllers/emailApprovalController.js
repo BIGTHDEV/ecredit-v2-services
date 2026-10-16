@@ -1,6 +1,5 @@
 const emailApprovalActionService = require('../services/emailApprovalActionService');
 const { notifyBestEffort } = require('../services/requestWorkflowNotificationService');
-const config = require('../config/env');
 
 async function getAction(req, res, next) {
   try {
@@ -18,7 +17,7 @@ async function confirmAction(req, res, next) {
       event: data.action === 'approve' && data.isFinalApproval ? 'final' : data.action,
       requestId: data.requestId,
       environment: process.env.NODE_ENV,
-      actorEmail: req.user?.email || config.email.bcc,
+      actorEmail: req.user?.email,
       actorName: req.user?.displayName || 'Email action user',
       user: req.user,
       auditActorCode: data.approverId,

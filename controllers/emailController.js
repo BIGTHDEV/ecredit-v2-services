@@ -1,6 +1,6 @@
 const { getModels } = require('../models');
 const emailLogService = require('../services/emailLogService');
-const { createEmailService } = require('../services/emailService');
+const { sendEmail } = require('../services/emailService');
 const { getRequestEmailModel } = require('../services/requestEmailModelService');
 
 function requestNotFound() {
@@ -64,12 +64,12 @@ async function resendRequestEmails(req, res, next) {
         const sendParameters = payload.sendParameters || payload;
         const recipients = sendParameters.recipients || { to: [], cc: [] };
         const currentModel = await getRequestEmailModel(req.params.requestId, req.user?.displayName || '-');
-        const result = await createEmailService({ environment: sendParameters.environment || process.env.NODE_ENV }).sendEmail({
+        const result = await sendEmail({
           template: sendParameters.template || emailLog.CATEGORY,
           subject: sendParameters.baseSubject || sendParameters.subject || emailLog.NAME,
           model: currentModel,
           recipients: {},
-          actorEmail: recipients.to?.[0],
+          actorEmail: req.user?.email,
           effectiveRecipients: recipients,
           effectiveBcc: sendParameters.bcc,
           requestId: req.params.requestId,

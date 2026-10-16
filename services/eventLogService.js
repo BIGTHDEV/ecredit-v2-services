@@ -441,6 +441,9 @@ async function persistRequestEvent({ req, res, durationMs }) {
       body: req.body || {},
       files: uploadedFiles(req.files),
     },
+    ...(Array.isArray(res.locals.outboundRequests) && res.locals.outboundRequests.length > 0
+      ? { outboundRequests: res.locals.outboundRequests }
+      : {}),
     response: { statusCode, durationMs },
   });
 
