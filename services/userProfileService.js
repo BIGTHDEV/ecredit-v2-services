@@ -22,6 +22,7 @@ async function getUserProfileByEmail(email) {
 
   // TB1 + TB3 (+ TB5/TB6 managers) + TB4: required Employee join replicates the WHERE filter
   const user = await User.findOne({
+    where: { ENABLED: '1' },
     include: [
       {
         model: Employee,

@@ -5,7 +5,9 @@ jest.mock('../models', () => ({ getModels: jest.fn() }));
 const { getModels } = require('../models');
 const { getUserProfileByEmail } = require('../services/userProfileService');
 
-function createProfileModels({ viewAsCode, viewAsEmployee }) {
+function createProfileModels(options) {
+  const { viewAsCode, viewAsEmployee } = options;
+  const enabled = Object.prototype.hasOwnProperty.call(options, 'enabled') ? options.enabled : '1';
   const mainEmployee = {
     EMP_CODE: '20221459',
     CURRENT_EMAIL: 'main@example.com',
@@ -37,13 +39,13 @@ function createProfileModels({ viewAsCode, viewAsEmployee }) {
   };
   const models = {
     User: {
-      findOne: jest.fn().mockResolvedValue({
+      findOne: jest.fn(async ({ where }) => (enabled === '1' && where.ENABLED === '1' ? {
         ID: '20221459',
         VIEW_AS: viewAsCode,
         employee: mainEmployee,
         costCenter: null,
         viewAsEmployee: targetEmployee,
-      }),
+      } : null)),
     },
     Employee,
     UserRole,
@@ -67,6 +69,15 @@ describe('userProfileService View As identity', () => {
     expect(profile.LOGGED_IN_INITIALS).toBe('MU');
     expect(profile.LOGGED_IN_FULL_NAME).toBe('Main User');
     expect(profile.IS_VIEWING_AS).toBe(false);
+  });
+
+  it.each(['0', undefined])('rejects a user whose ENABLED value is %s', async (enabled) => {
+    const models = createProfileModels({ viewAsCode: null, viewAsEmployee: null, enabled });
+
+    await expect(getUserProfileByEmail('main@example.com')).resolves.toBeNull();
+    expect(models.User.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: { ENABLED: '1' },
+    }));
   });
 
   it('does not enter View As when VIEW_AS equals the logged-in ID', async () => {
