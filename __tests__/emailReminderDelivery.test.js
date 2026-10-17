@@ -126,6 +126,48 @@ describe('reminder delivery through the real email service and request Email Log
     expect(state.update.mock.calls[0][0].LAST_ERROR).toBe('SMTP unavailable');
   });
 
+  test.each(['dev', 'qas', 'prd'])('refreshes draft recipients in %s reminders and persists the actual delivery', async (environment) => {
+    config.environment = environment;
+    models.Request.findOne.mockResolvedValue({
+      STATUS_ID: 'db8b3768-8466-4974-8dff-4c374b16a639', UPDATED_DATE: date(0),
+    });
+    models.Approval.findAll.mockResolvedValue([]);
+    getDatabase().query.mockImplementation(async (sql) => {
+      if (sql.includes('sp_getapplock')) return [{ RESULT: 0 }];
+      if (sql.includes('FROM USER_ROLES')) return [{ CURRENT_EMAIL: 'credit1@example.com; credit2@example.com;' }];
+      if (sql.includes('FROM REQUESTS')) return [{ CURRENT_EMAIL: 'requester@example.com' }];
+      return [{ NOW: date(60) }];
+    });
+    parameters.bcc = ['stored-audit@example.com'];
+
+    await processReminder(source, 'request-draft', undefined, parameters, 'draft-state');
+
+    expect(transporter.sendMail).toHaveBeenCalledTimes(1);
+    const sent = transporter.sendMail.mock.calls[0][0];
+    expect(sent).toMatchObject({
+      to: environment === 'prd' ? ['credit1@example.com', 'credit2@example.com'] : ['tester@example.com'],
+      cc: environment === 'prd' ? ['requester@example.com'] : [],
+      bcc: environment === 'prd' ? ['stored-audit@example.com'] : [],
+      context: { dear: 'Credit Team', isReminder: true },
+    });
+    if (environment !== 'prd') {
+      expect(sent.context.emailDebugInfo).toMatchObject({
+        to: ['credit1@example.com', 'credit2@example.com'], cc: ['requester@example.com'],
+      });
+    }
+    const logged = JSON.parse(emailLog.update.mock.calls[0][0].DESCRIPTION);
+    expect(logged.status).toBe('SENT');
+    expect(logged.sendParameters.recipients).toEqual({ to: sent.to, cc: sent.cc });
+    expect(logged.sendParameters.bcc).toEqual(sent.bcc);
+    expect(logged.sendParameters.model.dear).toBe('Credit Team');
+    expect(models.Email.create).toHaveBeenCalledWith(expect.objectContaining({
+      REQUEST_ID: source.REQUEST_ID, CATEGORY: 'request-draft',
+    }), { transaction });
+    const recipientQueries = getDatabase().query.mock.calls.filter(([sql]) => /FROM (USER_ROLES|REQUESTS)/.test(sql));
+    expect(recipientQueries).toHaveLength(2);
+    recipientQueries.forEach(([, options]) => expect(options.transaction).toBe(transaction));
+  });
+
   test.each(['dev', 'qas'])('does not send to a current real approver when the original %s tester is missing', async (environment) => {
     config.environment = environment;
     parameters.recipients.to = [];

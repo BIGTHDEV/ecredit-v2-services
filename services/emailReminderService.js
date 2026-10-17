@@ -6,7 +6,7 @@ const logger = require('../config/logger');
 const { getDatabase } = require('../config/database');
 const { getModels } = require('../models');
 const { parseDescription } = require('./emailLogService');
-const { listSettings, intervalMilliseconds } = require('./emailReminderConfigService');
+const { TEMPLATES, listSettings, intervalMilliseconds } = require('./emailReminderConfigService');
 const { sendEmail, resolveRecipients } = require('./emailService');
 const { getRequestEmailModel } = require('./requestEmailModelService');
 const { listApprovalHistory } = require('./requestService');
@@ -53,6 +53,8 @@ async function getEligibility(source, template, approvalId, transaction) {
     : template === 'request-final' ? FINAL_STATUS_ID : DRAFT_STATUS_ID;
   if (String(request.STATUS_ID).toLowerCase() !== expectedStatus) return null;
 
+  if (template === 'request-draft') return { anchor: timestamp(request.UPDATED_DATE) };
+
   const approvals = await Approval.findAll({ where: { REQUEST_ID: source.REQUEST_ID }, transaction });
   const cycle = approvals.filter((approval) => !request.SUBMITTED_DATE
     || timestamp(approval.CREATED_DATE) >= timestamp(request.SUBMITTED_DATE));
@@ -66,10 +68,6 @@ async function getEligibility(source, template, approvalId, transaction) {
   }
 
   const backwards = cycle.filter((approval) => String(approval.APPROVAL_TYPE_ID).toLowerCase() === BACKWARD_TYPE_ID);
-  if (template === 'request-draft') {
-    if (backwards.length || (request.SUBMITTED_DATE && sentAt < timestamp(request.SUBMITTED_DATE))) return null;
-    return { anchor: timestamp(request.UPDATED_DATE) };
-  }
   const actioned = template === 'request-backward' ? backwards
     : cycle.filter((approval) => approval.ENABLED && String(approval.APPROVAL_TYPE_ID).toLowerCase() === APPROVED_TYPE_ID);
   if (!actioned.length) return null;
@@ -85,6 +83,123 @@ function isDue(eligibility, state, settings, now) {
     state?.LAST_ATTEMPT_DATE ? timestamp(state.LAST_ATTEMPT_DATE) : 0,
   );
   return timestamp(now) - baseline >= intervalMilliseconds(settings);
+}
+
+function findSourceEmails(Email, templates, offset) {
+  const categories = templates.flatMap((template) => [template, `${template}.hbs`]);
+  if (templates.includes('request-draft')) categories.push('api.crm.email');
+  return Email.findAll({
+    where: {
+      ENABLED: true,
+      CATEGORY: { [Op.in]: categories },
+      [Op.and]: literal(`JSON_VALUE(CASE WHEN ISJSON([DESCRIPTION]) = 1 THEN [DESCRIPTION] ELSE '{}' END, '$.status') = 'SENT'
+        AND JSON_VALUE(CASE WHEN ISJSON([DESCRIPTION]) = 1 THEN [DESCRIPTION] ELSE '{}' END, '$.resendOf') IS NULL
+        AND (
+          [Email].[CATEGORY] <> 'api.crm.email'
+          OR JSON_VALUE(CASE WHEN ISJSON([DESCRIPTION]) = 1 THEN [DESCRIPTION] ELSE '{}' END, '$.template')
+            IN ('request-draft', 'request-draft.hbs')
+        )
+        AND EXISTS (
+          SELECT 1 FROM REQUESTS AS REMINDER_REQUEST
+          WHERE CONVERT(VARCHAR(128), REMINDER_REQUEST.ID) COLLATE DATABASE_DEFAULT
+            = CONVERT(VARCHAR(128), [Email].[REQUEST_ID]) COLLATE DATABASE_DEFAULT
+            AND REMINDER_REQUEST.ENABLED = 1
+            AND REMINDER_REQUEST.STATUS_ID IN ('${DRAFT_STATUS_ID}', '${WAITING_STATUS_ID}', '${FINAL_STATUS_ID}')
+        )
+        AND (
+          [Email].[CATEGORY] NOT IN ('request-draft', 'request-draft.hbs', 'api.crm.email')
+          OR NOT EXISTS (
+            SELECT 1 FROM EMAIL_LOGS AS DRAFT_FOLLOWUP
+            WHERE CONVERT(VARCHAR(128), DRAFT_FOLLOWUP.REQUEST_ID) COLLATE DATABASE_DEFAULT
+              = CONVERT(VARCHAR(128), [Email].[REQUEST_ID]) COLLATE DATABASE_DEFAULT
+              AND (
+                DRAFT_FOLLOWUP.CATEGORY IN ('request-draft', 'request-draft.hbs')
+                OR (
+                  DRAFT_FOLLOWUP.CATEGORY = 'api.crm.email'
+                  AND JSON_VALUE(CASE WHEN ISJSON(DRAFT_FOLLOWUP.DESCRIPTION) = 1 THEN DRAFT_FOLLOWUP.DESCRIPTION ELSE '{}' END, '$.template')
+                    IN ('request-draft', 'request-draft.hbs')
+                )
+              )
+              AND CONVERT(VARCHAR(128), DRAFT_FOLLOWUP.ID) COLLATE DATABASE_DEFAULT
+                <> CONVERT(VARCHAR(128), [Email].[ID]) COLLATE DATABASE_DEFAULT
+              AND COALESCE(
+                JSON_VALUE(CASE WHEN ISJSON(DRAFT_FOLLOWUP.DESCRIPTION) = 1 THEN DRAFT_FOLLOWUP.DESCRIPTION ELSE '{}' END, '$.sendParameters.reminderContext.automatic'),
+                JSON_VALUE(CASE WHEN ISJSON(DRAFT_FOLLOWUP.DESCRIPTION) = 1 THEN DRAFT_FOLLOWUP.DESCRIPTION ELSE '{}' END, '$.displayPayload.reminderContext.automatic'),
+                'false'
+              ) <> 'true'
+          )
+        )`),
+    },
+    order: [['CREATED_DATE', 'DESC'], ['ID', 'DESC']],
+    limit: PAGE_SIZE,
+    offset,
+  });
+}
+
+async function previewReminderRequests(template, input) {
+  if (!TEMPLATES.includes(template)) {
+    const error = new Error('Unsupported reminder template.');
+    error.statusCode = 400;
+    error.code = 'VALIDATION_ERROR';
+    throw error;
+  }
+  const interval = {
+    INTERVAL_VALUE: input?.intervalValue,
+    INTERVAL_UNIT: input?.intervalUnit,
+    ENABLED: true,
+  };
+  intervalMilliseconds(interval);
+
+  const { Email, EmailReminderState } = getModels();
+  const database = getDatabase();
+  const [{ NOW: now }] = await database.query('SELECT GETDATE() AS NOW', { type: QueryTypes.SELECT });
+  const requests = [];
+  const seen = new Set();
+  let skippedCount = 0;
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const rows = await findSourceEmails(Email, [template], offset);
+    for (const source of rows) {
+      try {
+        const parameters = parseDescription(source.DESCRIPTION).sendParameters;
+        if (!parameters) throw new Error('Original email has no stored send parameters.');
+        if (parameters.environment !== config.environment) continue;
+
+        const approvalId = template === 'request-approval' ? approvalIdFromLog(source, parameters) : undefined;
+        const key = reminderKey(source, template, approvalId);
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const eligibility = await getEligibility(source, template, approvalId);
+        if (!eligibility) continue;
+        const state = await EmailReminderState.findByPk(key);
+        if (!isDue(eligibility, state, interval, now)) continue;
+
+        const model = await getRequestEmailModel(source.REQUEST_ID, parameters.model?.dear || 'All');
+        requests.push({
+          requestId: source.REQUEST_ID,
+          requestNo: model.requestNo,
+          companyName: model.companyName,
+          requestLink: model.link,
+          approverName: eligibility.approver?.APPROVER_NAME || null,
+        });
+      } catch (error) {
+        skippedCount += 1;
+        logger.error('Unable to preview email reminder candidate', {
+          sourceEmailId: source.ID,
+          requestId: source.REQUEST_ID,
+          template,
+          message: error.message,
+        });
+      }
+    }
+    hasMore = rows.length === PAGE_SIZE;
+    if (hasMore) offset += PAGE_SIZE;
+  }
+
+  return { requests, skippedCount };
 }
 
 async function processReminder(source, template, approvalId, parameters, key) {
@@ -167,32 +282,15 @@ async function runEmailReminders(shouldStop = () => false) {
   const seen = new Set();
   let offset = 0;
   while (!shouldStop()) {
-    const rows = await Email.findAll({
-      where: {
-        ENABLED: true,
-        CATEGORY: { [Op.in]: templates.flatMap((template) => [template, `${template}.hbs`]) },
-        [Op.and]: literal(`JSON_VALUE(CASE WHEN ISJSON([DESCRIPTION]) = 1 THEN [DESCRIPTION] ELSE '{}' END, '$.status') = 'SENT'
-          AND JSON_VALUE(CASE WHEN ISJSON([DESCRIPTION]) = 1 THEN [DESCRIPTION] ELSE '{}' END, '$.resendOf') IS NULL
-          AND EXISTS (
-            SELECT 1 FROM REQUESTS AS REMINDER_REQUEST
-            WHERE CONVERT(VARCHAR(128), REMINDER_REQUEST.ID) COLLATE DATABASE_DEFAULT
-              = CONVERT(VARCHAR(128), [Email].[REQUEST_ID]) COLLATE DATABASE_DEFAULT
-              AND REMINDER_REQUEST.ENABLED = 1
-              AND REMINDER_REQUEST.STATUS_ID IN ('${DRAFT_STATUS_ID}', '${WAITING_STATUS_ID}', '${FINAL_STATUS_ID}')
-          )`),
-      },
-      order: [['CREATED_DATE', 'DESC'], ['ID', 'DESC']],
-      limit: PAGE_SIZE,
-      offset,
-    });
+    const rows = await findSourceEmails(Email, templates, offset);
     for (const source of rows) {
       if (shouldStop()) return;
       try {
         const payload = parseDescription(source.DESCRIPTION);
         const parameters = payload.sendParameters;
         if (!parameters) throw new Error('Original email has no stored send parameters; reminder was not sent.');
+        const template = (source.CATEGORY === 'api.crm.email' ? payload.template : source.CATEGORY).replace(/\.hbs$/i, '');
         if (parameters.environment !== config.environment) continue;
-        const template = source.CATEGORY.replace(/\.hbs$/i, '');
         const approvalId = template === 'request-approval' ? approvalIdFromLog(source, parameters) : undefined;
         const key = reminderKey(source, template, approvalId);
         if (seen.has(key)) continue;
@@ -227,4 +325,13 @@ function startEmailReminderScheduler() {
   };
 }
 
-module.exports = { approvalIdFromLog, reminderKey, getEligibility, isDue, processReminder, runEmailReminders, startEmailReminderScheduler };
+module.exports = {
+  approvalIdFromLog,
+  reminderKey,
+  getEligibility,
+  isDue,
+  previewReminderRequests,
+  processReminder,
+  runEmailReminders,
+  startEmailReminderScheduler,
+};

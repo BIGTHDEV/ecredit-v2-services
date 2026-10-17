@@ -4,6 +4,7 @@ const logger = require('../config/logger');
 const { getModels } = require('../models');
 const { formatThaiDateTime } = require('../helpers/thaiDateTime');
 const LOG_TYPE_IDS = require('../constants/logTypeIds');
+const { createSystemAdminErrorNotifications } = require('./notificationService');
 const {
   effectiveEmployeeCode,
   mainEmployeeCode,
@@ -462,6 +463,21 @@ async function persistRequestEvent({ req, res, durationMs }) {
     UPDATED_BY: actorCode,
     ENABLED: true,
   });
+
+  if (logType === 'error') {
+    const actor = {
+      email: mainUserAudit ? req.user?.email : profile?.EMAIL || req.user?.email,
+      name: mainUserAudit ? req.user?.displayName : profile?.FULL_NAME || req.user?.displayName,
+    };
+    await createSystemAdminErrorNotifications({
+      source: 'Event log',
+      requestId,
+      actorEmail: actor.email,
+      actorName: actor.name,
+      actorCode,
+      message: `${actionFromRequest(req.method, requestPath)} returned HTTP ${statusCode}`,
+    });
+  }
 }
 
 module.exports = {

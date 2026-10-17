@@ -58,7 +58,7 @@ the backlog before enabling it in PRD.
 | --- | --- | --- |
 | `request-approval.hbs` | Original successful email delivery; Save alone does not reset the timer | The specific approver approves/rejects/sends backward, leaves the current pending step/cycle, or request leaves Waiting Approval |
 | `request-backward.hbs` | Latest current-cycle Backward approval `UPDATED_DATE`, including disabled approval history | Request leaves Draft (resubmit/cancel); editing alone does not stop/reset it |
-| `request-draft.hbs` | `REQUESTS.UPDATED_DATE`; edits restart the timer | Request leaves Draft; returned drafts use Backward instead |
+| `request-draft.hbs` | `REQUESTS.UPDATED_DATE`; edits restart the timer | Request status changes from Draft; submission or Backward history does not independently affect eligibility |
 | `request-final.hbs` | Latest current-cycle Approved approval `UPDATED_DATE` | Request leaves Final (complete/cancel); editing alone does not stop/reset it |
 
 Only successful original email logs in the active environment are sources.
@@ -66,6 +66,15 @@ Reminders and manual resends are not new reminder sources. The latest original
 log per request/template is used (per approval ID for approval emails, including
 parallel approvers). The original To/CC/BCC and base subject are reused, current
 request content is rebuilt, and approval action links are freshly signed.
+Draft reminders require that the original `request-draft` log is the only
+non-automatic `request-draft` log for that request. Logs created by automatic
+Draft reminders do not count; a manual resend or another Draft email log makes
+the request ineligible for Draft reminders.
+Draft sources also accept category `api.crm.email` when `DESCRIPTION.template`
+is `request-draft` or `request-draft.hbs`. These logs participate in the same
+single-original-log rule. Stored `sendParameters` and matching runtime
+environment are still required; changing the category filter does not convert
+the external API's flat log payload into send parameters.
 Reminder subjects start with `Reminder!! [e-Credit]`, `Reminder!! [QAS e-Credit]`
 or `Reminder!! [DEV e-Credit]`, followed by the original subject text. The four
 reminder templates render a red `Reminder!!` banner only when the email service

@@ -33,6 +33,7 @@ const { listSettings } = require('../services/emailReminderConfigService');
 const { buildDescription } = require('../services/emailLogService');
 const {
   approvalIdFromLog, reminderKey, getEligibility, isDue, processReminder, runEmailReminders, startEmailReminderScheduler,
+  previewReminderRequests,
 } = require('../services/emailReminderService');
 
 const DRAFT = 'db8b3768-8466-4974-8dff-4c374b16a639';
@@ -80,6 +81,50 @@ beforeEach(() => {
 });
 
 describe('reminder eligibility and timing', () => {
+  test('previews only due requests using the selected interval without sending email', async () => {
+    source.DESCRIPTION = JSON.stringify({ sendParameters: parameters });
+    models.Email.findAll.mockResolvedValue([source]);
+    getRequestEmailModel.mockResolvedValue({
+      requestNo: 'REQ-100',
+      companyName: 'Example Company',
+      link: 'https://example.com/all-requests/request?tab=approver',
+    });
+
+    const result = await previewReminderRequests('request-final', { intervalValue: 1, intervalUnit: 'hours' });
+
+    expect(result).toEqual({
+      requests: [{
+        requestId: 'request',
+        requestNo: 'REQ-100',
+        companyName: 'Example Company',
+        requestLink: 'https://example.com/all-requests/request?tab=approver',
+        approverName: null,
+      }],
+      skippedCount: 0,
+    });
+    expect(models.EmailReminderState.findByPk).toHaveBeenCalledWith(reminderKey(source, 'request-final'));
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(models.EmailReminderState.create).not.toHaveBeenCalled();
+  });
+
+  test('does not preview candidates before the selected interval is due', async () => {
+    source.DESCRIPTION = JSON.stringify({ sendParameters: parameters });
+    models.Email.findAll.mockResolvedValue([source]);
+    database.query.mockImplementation(async () => [{ NOW: date(59) }]);
+
+    const result = await previewReminderRequests('request-final', { intervalValue: 1, intervalUnit: 'hours' });
+
+    expect(result.requests).toEqual([]);
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  test('validates template and interval when previewing', async () => {
+    await expect(previewReminderRequests('unknown-template', { intervalValue: 1, intervalUnit: 'hours' }))
+      .rejects.toMatchObject({ statusCode: 400 });
+    await expect(previewReminderRequests('request-final', { intervalValue: 0, intervalUnit: 'hours' }))
+      .rejects.toMatchObject({ statusCode: 400 });
+  });
+
   test('final counts from the last approval, not request edits or email delivery', async () => {
     const eligibility = await getEligibility(source, 'request-final');
     expect(eligibility.anchor).toBe(date(0).getTime());
@@ -87,19 +132,19 @@ describe('reminder eligibility and timing', () => {
     expect(isDue(eligibility, null, settings, date(59))).toBe(false);
   });
 
-  test('backward uses disabled approval history and ignores subsequent request edits', async () => {
+  test('backward uses disabled approval history while draft eligibility follows current status and updated date', async () => {
     models.Request.findOne.mockResolvedValue({ STATUS_ID: DRAFT, SUBMITTED_DATE: date(-10), UPDATED_DATE: date(50) });
     models.Approval.findAll.mockResolvedValue([{ APPROVAL_TYPE_ID: BACKWARD, CREATED_DATE: date(-5), UPDATED_DATE: date(0), ENABLED: false }]);
     expect((await getEligibility(source, 'request-backward')).anchor).toBe(date(0).getTime());
-    expect(await getEligibility(source, 'request-draft')).toBeNull();
+    expect(await getEligibility(source, 'request-draft')).toEqual({ anchor: date(50).getTime() });
   });
 
   test('draft restarts from REQUESTS.UPDATED_DATE and needs no approval history', async () => {
     models.Request.findOne.mockResolvedValue({ STATUS_ID: DRAFT, UPDATED_DATE: date(30) });
-    models.Approval.findAll.mockResolvedValue([]);
     const eligibility = await getEligibility(source, 'request-draft');
     expect(isDue(eligibility, null, settings, date(89))).toBe(false);
     expect(isDue(eligibility, null, settings, date(90))).toBe(true);
+    expect(models.Approval.findAll).not.toHaveBeenCalled();
   });
 
   test.each(['request-draft', 'request-backward', 'request-final', 'request-approval'])('stops %s after leaving the required status', async (template) => {
@@ -112,7 +157,7 @@ describe('reminder eligibility and timing', () => {
     expect(await getEligibility(source, 'request-final')).toBeNull();
   });
 
-  test('an old-cycle backward does not suppress a current draft', async () => {
+  test('a request currently in draft is eligible regardless of submission and backward history', async () => {
     models.Request.findOne.mockResolvedValue({ STATUS_ID: DRAFT, SUBMITTED_DATE: date(-2), UPDATED_DATE: date(10) });
     models.Approval.findAll.mockResolvedValue([{ APPROVAL_TYPE_ID: BACKWARD, CREATED_DATE: date(-5), UPDATED_DATE: date(-4) }]);
     expect((await getEligibility(source, 'request-draft')).anchor).toBe(date(10).getTime());
@@ -318,6 +363,69 @@ describe('reminder delivery and durable state', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  test('processes CRM Draft sources as request-draft when send parameters are present', async () => {
+    source.CATEGORY = 'api.crm.email';
+    source.DESCRIPTION = JSON.stringify({ template: 'request-draft', sendParameters: parameters });
+    models.Request.findOne.mockResolvedValue({ STATUS_ID: DRAFT, UPDATED_DATE: date(0) });
+    models.Email.findAll.mockResolvedValue([source]);
+    listSettings.mockResolvedValue([{ template: 'request-draft', enabled: true }]);
+
+    await runEmailReminders();
+
+    expect(models.Email.findAll.mock.calls[0][0].where.CATEGORY[Op.in]).toContain('api.crm.email');
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ template: 'request-draft' }));
+  });
+
+  test('previews CRM Draft sources without sending and reports missing send parameters', async () => {
+    source.CATEGORY = 'api.crm.email';
+    source.DESCRIPTION = JSON.stringify({ template: 'request-draft', sendParameters: parameters });
+    models.Request.findOne.mockResolvedValue({ STATUS_ID: DRAFT, UPDATED_DATE: date(0) });
+    models.Email.findAll.mockResolvedValue([source]);
+
+    const result = await previewReminderRequests('request-draft', { intervalValue: 1, intervalUnit: 'minutes' });
+    expect(result.requests).toHaveLength(1);
+    expect(sendEmail).not.toHaveBeenCalled();
+
+    source.DESCRIPTION = JSON.stringify({ template: 'request-draft', status: 'SENT' });
+    expect(await previewReminderRequests('request-draft', { intervalValue: 1, intervalUnit: 'minutes' }))
+      .toEqual({ requests: [], skippedCount: 1 });
+    expect(logger.error).toHaveBeenCalledWith('Unable to preview email reminder candidate',
+      expect.objectContaining({ message: 'Original email has no stored send parameters.' }));
+  });
+
+  test.each([
+    ['dev', 'request-draft', 'dev', true],
+    ['dev', 'request-draft', 'qas', false],
+    ['qas', 'request-draft', 'dev', false],
+    ['prd', 'request-draft', 'qas', false],
+    ['dev', 'request-final', 'qas', false],
+  ])('cross-environment %s %s from %s is allowed: %s for preview and delivery', async (environment, template, sourceEnvironment, allowed) => {
+    config.environment = environment;
+    parameters.environment = sourceEnvironment;
+    parameters.template = template;
+    source.CATEGORY = template === 'request-draft' ? 'api.crm.email' : template;
+    source.DESCRIPTION = JSON.stringify({ template, sendParameters: parameters });
+    settings.TEMPLATE = template;
+    if (template === 'request-draft') {
+      models.Request.findOne.mockResolvedValue({ STATUS_ID: DRAFT, UPDATED_DATE: date(0) });
+    }
+    models.Email.findAll.mockResolvedValue([source]);
+    listSettings.mockResolvedValue([{ template, enabled: true }]);
+
+    const result = await previewReminderRequests(template, { intervalValue: 1, intervalUnit: 'minutes' });
+    expect(result.requests).toHaveLength(allowed ? 1 : 0);
+    expect(sendEmail).not.toHaveBeenCalled();
+
+    await runEmailReminders();
+    expect(sendEmail).toHaveBeenCalledTimes(allowed ? 1 : 0);
+    if (allowed) {
+      expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
+        effectiveRecipients: { to: ['original@example.com'], cc: [] },
+        effectiveBcc: [],
+      }));
+    }
+  });
+
   test('invalid historical logs are reported without stopping other eligible emails', async () => {
     source.DESCRIPTION = JSON.stringify({ sendParameters: parameters });
     models.Email.findAll.mockResolvedValue([{ ...source, ID: 'invalid', DESCRIPTION: '{}' }, source]);
@@ -347,6 +455,12 @@ describe('reminder delivery and durable state', () => {
     expect(sql).toContain('CONVERT(VARCHAR(128), [Email].[REQUEST_ID])');
     expect(sql).toContain('REMINDER_REQUEST.ENABLED = 1');
     expect(sql).toContain('$.resendOf');
+    expect(sql).toContain("[Email].[CATEGORY] <> 'api.crm.email'");
+    expect(sql).toContain("'$.template')");
+    expect(sql).toContain("DRAFT_FOLLOWUP.CATEGORY = 'api.crm.email'");
+    expect(sql).toContain('DRAFT_FOLLOWUP.CATEGORY IN (\'request-draft\', \'request-draft.hbs\')');
+    expect(sql).toContain('$.sendParameters.reminderContext.automatic');
+    expect(sql).toContain('$.displayPayload.reminderContext.automatic');
     await sequelize.close();
   });
 });

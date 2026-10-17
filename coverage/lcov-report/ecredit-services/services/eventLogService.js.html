@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/177</span>
+                <span class='fraction'>0/181</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/154</span>
+                <span class='fraction'>0/164</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/166</span>
+                <span class='fraction'>0/170</span>
             </div>
         
             
@@ -540,12 +540,29 @@
 <a name='L475'></a><a href='#L475'>475</a>
 <a name='L476'></a><a href='#L476'>476</a>
 <a name='L477'></a><a href='#L477'>477</a>
-<a name='L478'></a><a href='#L478'>478</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L478'></a><a href='#L478'>478</a>
+<a name='L479'></a><a href='#L479'>479</a>
+<a name='L480'></a><a href='#L480'>480</a>
+<a name='L481'></a><a href='#L481'>481</a>
+<a name='L482'></a><a href='#L482'>482</a>
+<a name='L483'></a><a href='#L483'>483</a>
+<a name='L484'></a><a href='#L484'>484</a>
+<a name='L485'></a><a href='#L485'>485</a>
+<a name='L486'></a><a href='#L486'>486</a>
+<a name='L487'></a><a href='#L487'>487</a>
+<a name='L488'></a><a href='#L488'>488</a>
+<a name='L489'></a><a href='#L489'>489</a>
+<a name='L490'></a><a href='#L490'>490</a>
+<a name='L491'></a><a href='#L491'>491</a>
+<a name='L492'></a><a href='#L492'>492</a>
+<a name='L493'></a><a href='#L493'>493</a>
+<a name='L494'></a><a href='#L494'>494</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -992,10 +1009,25 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1023,6 +1055,7 @@ const logger = <span class="cstat-no" title="statement not covered" >require('..
 const { getModels } = <span class="cstat-no" title="statement not covered" >require('../models');</span>
 const { formatThaiDateTime } = <span class="cstat-no" title="statement not covered" >require('../helpers/thaiDateTime');</span>
 const LOG_TYPE_IDS = <span class="cstat-no" title="statement not covered" >require('../constants/logTypeIds');</span>
+const { createSystemAdminErrorNotifications } = <span class="cstat-no" title="statement not covered" >require('./notificationService');</span>
 const {
   effectiveEmployeeCode,
   mainEmployeeCode,
@@ -1039,7 +1072,7 @@ function <span class="fstat-no" title="function not covered" >requestIdFromPath(
 function <span class="fstat-no" title="function not covered" >isEventLogReadRequest(</span>method, requestPath) {
 <span class="cstat-no" title="statement not covered" >  return (</span>
     String(method).toUpperCase() === 'GET' &amp;&amp;
-    /\/requests\/(?:event-logs(?:\/[^/?]+)?|[^/?]+\/event-logs(?:\/[^/?]+)?)\/?(?:\?.*)?$/i.test(String(requestPath || ''))
+    /\/requests\/(?:(?:event-logs|email-logs)(?:\/[^/?]+)?|[^/?]+\/event-logs(?:\/[^/?]+)?)\/?(?:\?.*)?$/i.test(String(requestPath || ''))
   );
 }
 &nbsp;
@@ -1481,6 +1514,21 @@ async function <span class="fstat-no" title="function not covered" >persistReque
     UPDATED_BY: actorCode,
     ENABLED: true,
   });
+&nbsp;
+<span class="cstat-no" title="statement not covered" >  if (logType === 'error') {</span>
+    const actor = <span class="cstat-no" title="statement not covered" >{</span>
+      email: mainUserAudit ? req.user?.email : profile?.EMAIL || req.user?.email,
+      name: mainUserAudit ? req.user?.displayName : profile?.FULL_NAME || req.user?.displayName,
+    };
+<span class="cstat-no" title="statement not covered" >    await createSystemAdminErrorNotifications({</span>
+      source: 'Event log',
+      requestId,
+      actorEmail: actor.email,
+      actorName: actor.name,
+      actorCode,
+      message: `${actionFromRequest(req.method, requestPath)} returned HTTP ${statusCode}`,
+    });
+  }
 }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >module.exports = {</span>
@@ -1501,7 +1549,7 @@ async function <span class="fstat-no" title="function not covered" >persistReque
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-16T08:39:21.626Z
+                at 2026-10-17T04:17:03.608Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

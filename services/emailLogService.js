@@ -4,6 +4,7 @@ const { getModels } = require('../models');
 const { formatThaiDateTime } = require('../helpers/thaiDateTime');
 const LOG_TYPE_IDS = require('../constants/logTypeIds');
 const { effectiveEmployeeCode, employeeCode: normalizeEmployeeCode } = require('../helpers/userIdentity');
+const { createSystemAdminErrorNotifications } = require('./notificationService');
 
 const MAX_DESCRIPTION_BYTES = 1024 * 1024;
 const AUTOMATIC_REMINDER_ACTOR = 'System (Auto Reminder)';
@@ -112,6 +113,19 @@ async function updateEmailLog(emailLog, payload) {
     UPDATED_DATE: Email.sequelize.literal('GETDATE()'),
     UPDATED_BY: employeeCode(payload.user, payload.auditActorCode),
   }, ...(payload.transaction ? [{ transaction: payload.transaction }] : []));
+  if (String(payload.status || '').toUpperCase() === 'FAILED') {
+    const profile = payload.user?.profile;
+    await createSystemAdminErrorNotifications({
+      source: 'Email log',
+      requestId: payload.requestId,
+      requestNo: payload.model?.requestNo,
+      actorEmail: profile?.EMAIL || payload.user?.email,
+      actorName: profile?.FULL_NAME || payload.user?.displayName,
+      actorCode: payload.auditActorCode === undefined ? effectiveEmployeeCode(profile) : payload.auditActorCode,
+      message: `Email delivery failed for ${payload.subject || 'an email'}${payload.error?.message ? `: ${payload.error.message}` : ''}`,
+      transaction: payload.transaction,
+    });
+  }
   return emailLog;
 }
 

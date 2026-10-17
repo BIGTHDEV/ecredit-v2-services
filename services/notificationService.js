@@ -2,10 +2,12 @@ const { v4: uuidv4 } = require('uuid');
 const { getModels } = require('../models');
 const { formatThaiDateTime } = require('../helpers/thaiDateTime');
 const { employeeCode } = require('../helpers/userIdentity');
+const { Op } = require('sequelize');
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const APPROVER_EVENTS = new Set(['submit', 'approve', 'final']);
+const SYSTEM_ADMIN_ROLE_ID = 'd854d840-d18c-4a7d-87c1-a9186f8664e5';
 
 const EVENT_TITLES = {
   submit: 'New request for your approval',
@@ -116,6 +118,58 @@ async function createWorkflowNotifications({ event, requestId, toRecords, ccReco
   })));
 }
 
+async function createSystemAdminErrorNotifications({ source, requestId, requestNo, actorEmail, actorName, actorCode, message, transaction }) {
+  const { Notification, UserRole, Role, User, Employee } = getModels();
+  const userRoles = await UserRole.findAll({
+    where: { ROLE_ID: SYSTEM_ADMIN_ROLE_ID, ENABLED: '1' },
+    include: [{ model: Role, as: 'role', where: { ENABLED: '1' }, attributes: [] }],
+  });
+  const userIds = [...new Set(userRoles.map((userRole) => userRole.USER_ID).filter(Boolean))];
+  if (!userIds.length) return [];
+
+  const users = await User.findAll({
+    where: { ID: { [Op.in]: userIds }, ENABLED: '1' },
+    include: [{
+      model: Employee,
+      as: 'employee',
+      required: true,
+      where: { CURRENT_EMAIL: { [Op.ne]: null } },
+    }],
+  });
+  const recipients = new Map();
+  users.forEach((user) => {
+    const email = normalizeEmail(user.employee?.CURRENT_EMAIL);
+    if (email && !recipients.has(email)) recipients.set(email, user.employee?.NAME_ENG || user.employee?.USERNAME || '');
+  });
+  if (!recipients.size) return [];
+
+  const auditCode = employeeCode(actorCode) ?? 0;
+  const now = Notification.sequelize.literal('GETDATE()');
+  const rows = [...recipients].map(([email, name]) => ({
+    ID: uuidv4(),
+    RECIPIENT_EMAIL: email,
+    RECIPIENT_NAME: name || null,
+    RECIPIENT_TYPE: 'TO',
+    REQUEST_ID: requestId ? String(requestId) : null,
+    REQUEST_NO: requestNo || null,
+    EVENT_TYPE: 'system-error',
+    TITLE: `${source} error`,
+    MESSAGE: String(message || '').slice(0, 2048),
+    TAB: 'customers',
+    ACTOR_EMAIL: normalizeEmail(actorEmail) || null,
+    ACTOR_NAME: String(actorName || '').trim() || null,
+    IS_READ: false,
+    READ_DATE: null,
+    CREATED_DATE: now,
+    UPDATED_DATE: now,
+    CREATED_BY: auditCode,
+    UPDATED_BY: auditCode,
+    ENABLED: true,
+    SORTING: null,
+  }));
+  return Notification.bulkCreate(rows, ...(transaction ? [{ transaction }] : []));
+}
+
 function toNotificationSummary(notification) {
   const tab = notification.TAB;
   return {
@@ -201,6 +255,7 @@ async function markAllRead(email) {
 module.exports = {
   collectRecipients,
   createWorkflowNotifications,
+  createSystemAdminErrorNotifications,
   countUnread,
   listForUser,
   markRead,

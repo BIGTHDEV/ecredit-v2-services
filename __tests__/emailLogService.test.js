@@ -1,8 +1,10 @@
 /* eslint-env jest */
 
 jest.mock('../models', () => ({ getModels: jest.fn() }));
+jest.mock('../services/notificationService', () => ({ createSystemAdminErrorNotifications: jest.fn() }));
 
 const { getModels } = require('../models');
+const { createSystemAdminErrorNotifications } = require('../services/notificationService');
 const { buildDescription, parseDescription, sanitizeValue, createEmailLog, updateEmailLog, listEmailLogs, toEmailSummary } = require('../services/emailLogService');
 
 describe('emailLogService', () => {
@@ -107,6 +109,30 @@ describe('emailLogService', () => {
     await updateEmailLog(emailLog, { status, subject: 'Subject' });
 
     expect(emailLog.update).toHaveBeenCalledWith(expect.objectContaining({ LOG_TYPE_ID: logTypeId }));
+  });
+
+  test('notifies System Admins when an email log fails', async () => {
+    const Email = { sequelize: { literal: jest.fn((value) => value) } };
+    const emailLog = { update: jest.fn().mockResolvedValue(undefined) };
+    getModels.mockReturnValue({ Email });
+
+    await updateEmailLog(emailLog, {
+      status: 'FAILED',
+      requestId: 'request-1',
+      subject: 'Request update',
+      model: { requestNo: 'CR-001' },
+      user: { email: 'actor@example.com', profile: { EMAIL: 'actor@example.com', FULL_NAME: 'Actor', CODE: 123 } },
+      error: new Error('SMTP unavailable'),
+    });
+
+    expect(createSystemAdminErrorNotifications).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'Email log',
+      requestId: 'request-1',
+      requestNo: 'CR-001',
+      actorEmail: 'actor@example.com',
+      actorCode: 123,
+      message: 'Email delivery failed for Request update: SMTP unavailable',
+    }));
   });
 
   test('keeps raw Base64 in send parameters but shortens only display payload', () => {

@@ -1,5 +1,7 @@
 const path = require('path');
+const { QueryTypes } = require('sequelize');
 const config = require('../config/env');
+const { getDatabase } = require('../config/database');
 const { getEmailTransporter, templatesDirectory } = require('../config/email');
 const { isModelsInitialized } = require('../models');
 const { createEmailLog, updateEmailLog } = require('./emailLogService');
@@ -129,6 +131,38 @@ function resolveTemplate(template) {
   return templateName;
 }
 
+async function resolveDraftRecipients(requestId, transaction) {
+  if (missingValue(requestId)) throw new Error('requestId is required for request-draft email.');
+
+  const database = getDatabase();
+  const [team] = await database.query(`
+    SELECT
+      STRING_AGG(UPPER(TB2.INITIALS), '/') AS INITIALS,
+      STRING_AGG(LOWER(TB2.CURRENT_EMAIL), '; ') + ';' AS CURRENT_EMAIL
+    FROM USER_ROLES AS TB1
+    LEFT JOIN S_EMPLOYEE1 AS TB2 ON TB1.USER_ID = TB2.EMP_CODE
+    WHERE TB1.ENABLED = '1'
+      AND TB1.ROLE_ID = :roleId;
+  `, {
+    replacements: { roleId: 'fd08992c-08cc-4c39-8f0d-dfcc0cb90663' },
+    type: QueryTypes.SELECT,
+    transaction,
+  });
+  const requesters = await database.query(`
+    SELECT TB2.INITIALS, LOWER(TB2.CURRENT_EMAIL) AS CURRENT_EMAIL
+    FROM REQUESTS AS TB1
+    LEFT JOIN S_EMPLOYEE1 AS TB2 ON TB1.REQUESTED_BY = TB2.EMP_CODE
+    WHERE TB1.ENABLED = '1'
+      AND TB1.ID = :requestId;
+  `, { replacements: { requestId }, type: QueryTypes.SELECT, transaction });
+
+  const to = normalizeEmailList(team?.CURRENT_EMAIL?.split(';'), 'draft.to');
+  const cc = normalizeEmailList(requesters.map((requester) => requester.CURRENT_EMAIL).filter(Boolean), 'draft.cc');
+  if (!to.length) throw new Error('No Credit Team email recipients were found for request-draft email.');
+  if (!cc.length) throw new Error('No requester email recipient was found for request-draft email.');
+  return { to, cc };
+}
+
 function createEmailService({ environment = config.environment, bcc = config.email.bcc, transporter } = {}) {
   async function sendEmail({ template, subject, model, recipients, actorEmail, requestId, user, resendOf, effectiveRecipients, effectiveBcc, intendedRecipients, auditActorCode, reminderContext, transaction }) {
     const normalizedEnvironment = String(environment).toLowerCase();
@@ -136,6 +170,12 @@ function createEmailService({ environment = config.environment, bcc = config.ema
     if (missingValue(subject)) throw new Error('subject is required.');
 
     const resolvedTemplate = resolveTemplate(template);
+    if (resolvedTemplate === 'request-draft') {
+      recipients = await resolveDraftRecipients(requestId, transaction);
+      intendedRecipients = recipients;
+      effectiveRecipients = undefined;
+      model = { ...model, dear: 'Credit Team' };
+    }
     const resolveActorEmail = normalizedEnvironment === 'prd' ? actorEmail
       : (user ? (user.profile?.LOGGED_IN_EMAIL || user.email) : actorEmail);
     const resolvedRecipients = normalizedEnvironment === 'prd'

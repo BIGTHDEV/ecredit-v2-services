@@ -12,7 +12,7 @@ describe.each(['request-approval', 'request-backward', 'request-draft', 'request
       const html = render({ dear: 'Recipient', requestNo: 'REQ-001', isReminder });
       expect(html.includes('<p class="reminder-banner">Reminder!!</p>')).toBe(isReminder === true);
       expect((html.match(/Reminder!!/g) || []).length).toBe(isReminder === true ? 1 : 0);
-      expect(html).toContain('Dear Recipient,');
+      expect(html).toContain(template === 'request-draft' ? 'Dear Credit Team,' : 'Dear Recipient,');
       expect(html).toContain('REQ-001');
     }
   });

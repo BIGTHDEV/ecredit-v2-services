@@ -8,7 +8,9 @@ jest.mock('../config/email', () => ({
   templatesDirectory: require('path').resolve(__dirname, '../templates'),
   getEmailTransporter: jest.fn(),
 }));
+jest.mock('../config/database', () => ({ getDatabase: jest.fn() }));
 
+const { getDatabase } = require('../config/database');
 const { createEmailService, normalizeModel, subjectPrefix } = require('../services/emailService');
 
 const model = { companyName: 'Acme', customerType: '' };
@@ -18,6 +20,101 @@ function createTransporter() {
 }
 
 describe('emailService', () => {
+  describe('request-draft recipients', () => {
+    let query;
+    const transaction = { id: 'draft-transaction' };
+
+    beforeEach(() => {
+      query = jest.fn()
+        .mockResolvedValueOnce([{ INITIALS: 'CREDIT1/CREDIT2', CURRENT_EMAIL: 'credit1@example.com; credit2@example.com;' }])
+        .mockResolvedValueOnce([{ INITIALS: 'REQUESTER', CURRENT_EMAIL: 'requester@example.com' }]);
+      getDatabase.mockReturnValue({ query });
+    });
+
+    test.each([
+      ['dev', 'normal'], ['qas', 'normal'], ['prd', 'normal'],
+      ['dev', 'resend'], ['qas', 'resend'], ['prd', 'resend'],
+      ['dev', 'reminder'], ['qas', 'reminder'], ['prd', 'reminder'],
+    ])('uses current team/requester recipients for %s %s delivery and debug details', async (environment, mode) => {
+      const transporter = createTransporter();
+      const isProduction = environment === 'prd';
+      await createEmailService({ environment, transporter }).sendEmail({
+        template: 'request-draft.hbs',
+        subject: 'Draft request',
+        model: { ...model, dear: 'Old recipient' },
+        requestId: 'request-1',
+        recipients: { to: ['old-team@example.com'], cc: ['old-requester@example.com'] },
+        intendedRecipients: { to: ['wrong-debug@example.com'], cc: [] },
+        effectiveRecipients: { to: ['old-tester@example.com'], cc: ['old-copy@example.com'] },
+        effectiveBcc: mode === 'normal' ? undefined : ['stored-audit@example.com'],
+        actorEmail: 'viewed@example.com',
+        user: { profile: { LOGGED_IN_EMAIL: 'tester@example.com', EFFECTIVE_EMAIL: 'viewed@example.com' } },
+        resendOf: mode === 'normal' ? undefined : 'source-email',
+        reminderContext: mode === 'reminder' ? { automatic: true } : undefined,
+        transaction,
+      });
+
+      expect(query).toHaveBeenNthCalledWith(1, expect.stringMatching(/TB1\.USER_ID = TB2\.EMP_CODE/), {
+        replacements: { roleId: 'fd08992c-08cc-4c39-8f0d-dfcc0cb90663' }, type: 'SELECT', transaction,
+      });
+      expect(query.mock.calls[0][0]).toContain('STRING_AGG(LOWER(TB2.CURRENT_EMAIL)');
+      expect(query.mock.calls[0][0]).toContain("TB1.ENABLED = '1'");
+      expect(query).toHaveBeenNthCalledWith(2, expect.stringMatching(/TB1\.REQUESTED_BY = TB2\.EMP_CODE/), {
+        replacements: { requestId: 'request-1' }, type: 'SELECT', transaction,
+      });
+      expect(query.mock.calls[1][0]).toContain("TB1.ENABLED = '1'");
+      const sent = transporter.sendMail.mock.calls[0][0];
+      expect(sent.to).toEqual(isProduction ? ['credit1@example.com', 'credit2@example.com'] : ['tester@example.com']);
+      expect(sent.cc).toEqual(isProduction ? ['requester@example.com'] : []);
+      expect(sent.bcc).toEqual(isProduction ? [mode === 'normal' ? 'audit@example.com' : 'stored-audit@example.com'] : []);
+      expect(sent.context.dear).toBe('Credit Team');
+      expect(sent.context.isReminder).toBe(mode === 'reminder');
+      if (isProduction) {
+        expect(sent.context).not.toHaveProperty('emailDebugInfo');
+      } else {
+        expect(sent.context.emailDebugInfo).toMatchObject({
+          to: ['credit1@example.com', 'credit2@example.com'],
+          cc: ['requester@example.com'],
+        });
+        const fs = require('fs');
+        const path = require('path');
+        const handlebars = require('handlebars');
+        const html = handlebars.compile(fs.readFileSync(path.join(__dirname, '..', 'templates', 'request-draft.hbs'), 'utf8'))(sent.context);
+        expect(html).toContain('Dear Credit Team,');
+        expect(html).toContain('Show for testing only.');
+        expect(html).toMatch(/<strong>To:<\/strong>[\s\S]*credit1@example\.com[\s\S]*credit2@example\.com/);
+        expect(html).toMatch(/<strong>CC:<\/strong>\s*requester@example\.com/);
+        expect(html).not.toContain('old-team@example.com');
+      }
+    });
+
+    test.each([
+      [[], [{ CURRENT_EMAIL: 'requester@example.com' }], 'Credit Team'],
+      [[{ CURRENT_EMAIL: null }], [{ CURRENT_EMAIL: 'requester@example.com' }], 'Credit Team'],
+      [[{ CURRENT_EMAIL: 'credit@example.com;' }], [], 'requester'],
+      [[{ CURRENT_EMAIL: 'credit@example.com;' }], [{ CURRENT_EMAIL: null }], 'requester'],
+      [[{ CURRENT_EMAIL: 'invalid;' }], [{ CURRENT_EMAIL: 'requester@example.com' }], 'invalid email'],
+    ])('rejects missing or invalid draft recipients without sending (%s, %s)', async (team, requester, error) => {
+      query.mockReset().mockResolvedValueOnce(team).mockResolvedValueOnce(requester);
+      const transporter = createTransporter();
+      await expect(createEmailService({ environment: 'dev', transporter }).sendEmail({
+        template: 'request-draft', subject: 'Draft', model, requestId: 'request-1', actorEmail: 'tester@example.com',
+      })).rejects.toThrow(error);
+      expect(transporter.sendMail).not.toHaveBeenCalled();
+    });
+
+    test('requires the request identity and propagates database failures', async () => {
+      const transporter = createTransporter();
+      const service = createEmailService({ environment: 'prd', transporter });
+      const payload = { template: 'request-draft', subject: 'Draft', model };
+      await expect(service.sendEmail(payload)).rejects.toThrow('requestId is required');
+      expect(query).not.toHaveBeenCalled();
+      query.mockReset().mockRejectedValue(new Error('Database unavailable'));
+      await expect(service.sendEmail({ ...payload, requestId: 'request-1' })).rejects.toThrow('Database unavailable');
+      expect(transporter.sendMail).not.toHaveBeenCalled();
+    });
+  });
+
   test.each([
     ['dev', 'Reminder!! [DEV e-Credit] - Subject'],
     ['qas', 'Reminder!! [QAS e-Credit] - Subject'],

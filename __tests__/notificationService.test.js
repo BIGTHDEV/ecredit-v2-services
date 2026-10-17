@@ -10,13 +10,57 @@ const mockNotification = {
   findOne: jest.fn(),
   update: jest.fn(),
 };
+const mockUserRole = { findAll: jest.fn() };
+const mockUser = { findAll: jest.fn() };
+const mockRole = {};
+const mockEmployee = {};
 
-jest.mock('../models', () => ({ getModels: () => ({ Notification: mockNotification }) }));
+jest.mock('../models', () => ({ getModels: () => ({
+  Notification: mockNotification,
+  UserRole: mockUserRole,
+  User: mockUser,
+  Role: mockRole,
+  Employee: mockEmployee,
+}) }));
 
 const notificationService = require('../services/notificationService');
 
 describe('notificationService', () => {
   beforeEach(() => jest.clearAllMocks());
+
+  it('notifies every active System Admin about an error on the customers tab', async () => {
+    mockUserRole.findAll.mockResolvedValue([{ USER_ID: '1001' }, { USER_ID: '1002' }, { USER_ID: '1001' }]);
+    mockUser.findAll.mockResolvedValue([
+      { employee: { CURRENT_EMAIL: 'ADMIN1@example.com', NAME_ENG: 'Admin One' } },
+      { employee: { CURRENT_EMAIL: 'admin2@example.com', USERNAME: 'Admin Two' } },
+      { employee: { CURRENT_EMAIL: 'admin1@example.com', NAME_ENG: 'Duplicate' } },
+    ]);
+
+    const rows = await notificationService.createSystemAdminErrorNotifications({
+      source: 'Event log',
+      requestId: 'request-1',
+      actorEmail: 'user@example.com',
+      actorName: 'Request User',
+      actorCode: 2001,
+      message: 'POST request approval-action returned HTTP 500',
+    });
+
+    expect(mockUserRole.findAll).toHaveBeenCalledWith(expect.objectContaining({
+      where: { ROLE_ID: 'd854d840-d18c-4a7d-87c1-a9186f8664e5', ENABLED: '1' },
+    }));
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.RECIPIENT_EMAIL)).toEqual(['admin1@example.com', 'admin2@example.com']);
+    expect(rows[0]).toMatchObject({
+      RECIPIENT_NAME: 'Admin One',
+      REQUEST_ID: 'request-1',
+      EVENT_TYPE: 'system-error',
+      TITLE: 'Event log error',
+      TAB: 'customers',
+      ACTOR_EMAIL: 'user@example.com',
+      CREATED_BY: 2001,
+      IS_READ: false,
+    });
+  });
 
   it('merges TO and CC recipients, prefers TO, and excludes the actor', () => {
     expect(notificationService.collectRecipients(

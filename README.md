@@ -248,8 +248,16 @@ Recipient policy:
 - DEV/QAS reject delivery if no tester email is available; `EMAIL_BCC` is not a fallback.
 - PRD accepts `recipients: { to: string[], cc: string[] }` from the caller.
 - Only PRD adds `EMAIL_BCC`.
+- `request-draft` always greets `Credit Team`. TO is every enabled `USER_ROLES`
+  member with role ID `fd08992c-08cc-4c39-8f0d-dfcc0cb90663`, joined to
+  `S_EMPLOYEE1` by employee code; CC is the enabled request's `REQUESTED_BY`
+  employee. These recipients are queried again for each send, resend, and reminder.
+  In DEV/QAS, the "Show for testing only." footer displays these intended TO/CC
+  recipients while delivery remains restricted to the tester. Missing team or
+  requester email recipients cause an explicit error rather than fallback delivery.
 - Resending uses the current runtime environment and current logged-in tester, not
-  the environment or tester stored in an old email log. PRD retains logged recipients.
+  the environment or tester stored in an old email log. PRD retains logged recipients
+  except for `request-draft`, which uses the current team and requester.
 - Subjects are prefixed as `[DEV e-Credit]`, `[QAS e-Credit]`, or `[e-Credit]`.
 
 For request data, `services/requestEmailModelService.js` exposes

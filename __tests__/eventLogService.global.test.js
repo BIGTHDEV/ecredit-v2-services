@@ -2,9 +2,11 @@
 
 jest.mock('../models', () => ({ getModels: jest.fn() }));
 jest.mock('../config/logger', () => ({ redactPayload: (payload) => payload }));
+jest.mock('../services/notificationService', () => ({ createSystemAdminErrorNotifications: jest.fn() }));
 
 const { Op } = require('sequelize');
 const { getModels } = require('../models');
+const { createSystemAdminErrorNotifications } = require('../services/notificationService');
 const { getAllEvent, listAllEvents, persistRequestEvent } = require('../services/eventLogService');
 
 describe('global event logs', () => {
@@ -178,5 +180,26 @@ describe('global event logs', () => {
     await persistRequestEvent({ req, res, durationMs: 10 });
 
     expect(JSON.parse(Log.create.mock.calls[0][0].DESCRIPTION).outboundRequests).toEqual(outboundRequests);
+  });
+
+  it('notifies System Admins when an error event is persisted', async () => {
+    const req = {
+      method: 'POST',
+      originalUrl: '/dev/api/requests/request-1/approval-action',
+      user: { email: 'actor@example.com', displayName: 'Actor', profile: { CODE: 123, EMAIL: 'actor@example.com', FULL_NAME: 'Actor' } },
+      body: {},
+      query: {},
+    };
+    const res = { statusCode: 500, locals: {} };
+
+    await persistRequestEvent({ req, res, durationMs: 10 });
+
+    expect(createSystemAdminErrorNotifications).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'Event log',
+      requestId: 'request-1',
+      actorEmail: 'actor@example.com',
+      actorCode: 123,
+      message: 'POST request approval-action returned HTTP 500',
+    }));
   });
 });

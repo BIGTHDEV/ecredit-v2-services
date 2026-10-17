@@ -1,4 +1,5 @@
 const service = require('../services/emailReminderConfigService');
+const reminderService = require('../services/emailReminderService');
 const { isAdminRole } = require('../helpers/roleAuthorization');
 const { effectiveEmployeeCode } = require('../helpers/userIdentity');
 
@@ -35,4 +36,13 @@ async function update(req, res, next) {
   } catch (error) { next(error); }
 }
 
-module.exports = { list, update };
+async function preview(req, res, next) {
+  try {
+    requireAdmin(req);
+    const data = await reminderService.previewReminderRequests(req.params.template, req.body);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ success: true, data, correlationId: res.locals.correlationId || 'N/A' });
+  } catch (error) { next(error); }
+}
+
+module.exports = { list, update, preview };
