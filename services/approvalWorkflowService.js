@@ -12,8 +12,7 @@ async function propagateApprovedValues({
 }) {
   await getDatabase().query(
     `UPDATE TB1
-     SET DESCRIPTION = TB2.DESCRIPTION,
-         LIMIT_AMOUNT = TB2.LIMIT_AMOUNT,
+     SET LIMIT_AMOUNT = TB2.LIMIT_AMOUNT,
          TERM_ID = TB2.TERM_ID,
          RATING_ID = TB2.RATING_ID,
          IS_PERMANENT = TB2.IS_PERMANENT,

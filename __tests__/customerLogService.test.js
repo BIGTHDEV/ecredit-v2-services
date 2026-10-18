@@ -20,6 +20,52 @@ describe('customerLogService', () => {
     getModels.mockReturnValue({ Customer, CustomerLog, Employee: {}, LogType: {} });
   });
 
+  it('records Find Company Data lookups with the outbound payload and result', async () => {
+    const result = { fields: { registeredDate: { value: '2020-01-01' } }, sources: [{ url: 'https://example.com' }] };
+
+    await customerLogService.recordCompanyInfoLookup({
+      customerId: 'customer-1',
+      taxNo: '1234567890123',
+      actorId: 7,
+      outboundPayload: { Prompt: 'Search prompt' },
+      result,
+    });
+
+    const record = CustomerLog.create.mock.calls[0][0];
+    expect(record).toEqual(expect.objectContaining({
+      CUSTOMER_ID: 'customer-1',
+      TAX_NO: '1234567890123',
+      NAME: 'Company data searched',
+      CATEGORY: 'customer.company-info-lookup',
+      LOG_TYPE_ID: '23556cea-337f-475c-9b6a-830bfa08ab93',
+      CREATED_BY: 7,
+    }));
+    expect(JSON.parse(record.DESCRIPTION)).toEqual(expect.objectContaining({
+      action: 'lookup',
+      source: 'Find Company Data',
+      status: 'success',
+      request: { Prompt: 'Search prompt' },
+      response: result,
+    }));
+  });
+
+  it('records failed Find Company Data lookups as errors', async () => {
+    await customerLogService.recordCompanyInfoLookup({
+      customerId: 'customer-1',
+      taxNo: '1234567890123',
+      actorId: 7,
+      error: Object.assign(new Error('Power Platform unavailable'), { code: 'POWERPLATFORM_ERROR' }),
+    });
+
+    const record = CustomerLog.create.mock.calls[0][0];
+    expect(record.NAME).toBe('Company data search failed');
+    expect(record.LOG_TYPE_ID).toBe('2d8e6e9d-0b7b-427f-a5ba-0e65f61d945b');
+    expect(JSON.parse(record.DESCRIPTION)).toEqual(expect.objectContaining({
+      status: 'failed',
+      error: { code: 'POWERPLATFORM_ERROR', message: 'Power Platform unavailable' },
+    }));
+  });
+
   it('lists enabled logs for the active customer with bounded pagination', async () => {
     const result = await customerLogService.listCustomerLogs('customer-1', {
       page: '2',

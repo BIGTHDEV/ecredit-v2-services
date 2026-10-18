@@ -109,10 +109,13 @@ describe('customerService Customer Extensions creation', () => {
     Customer.sequelize.query.mockResolvedValue([{
       SOLDTO_NO: '110000001',
       SOLDTO_NAME_ENG: 'Example Ltd.',
+      SOLDTO_NAME_THAI: 'บริษัท ตัวอย่าง จำกัด  ',
       CUST_PHONE: '123',
       CUST_FAX: '456',
       ADDRESS_ENG_SOLDTO: 'Example address',
       TAX_NO: '1234567890123',
+      COMPANY_CODE: '1000',
+      COMPANY_NAME: 'BIG',
     }]);
 
     const results = await customerService.searchSoldToCustomers('Example', '100');
@@ -124,6 +127,8 @@ describe('customerService Customer Extensions creation', () => {
     expect(results[0]).toEqual({
       SOLDTO_NO: '110000001',
       SOLDTO_NAME_ENG: 'Example Ltd.',
+      SOLDTO_NAME_TH: 'บริษัท ตัวอย่าง จำกัด',
+      COMPANY_CODE: '1000 - BIG',
       CUST_PHONE: '123',
       CUST_FAX: '456',
       ADDRESS_ENG_SOLDTO: 'Example address',

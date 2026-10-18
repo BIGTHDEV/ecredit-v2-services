@@ -32,6 +32,57 @@ function formatDate(value) {
   return `${day}/${month}/${date.getFullYear()}`;
 }
 
+function formatAdjustmentDate(value) {
+  if (isMissing(value)) return '-';
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  let year;
+  let month;
+  let day;
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return '-';
+    year = value.getUTCFullYear();
+    month = value.getUTCMonth() + 1;
+    day = value.getUTCDate();
+  } else {
+    const dateValue = String(value).trim();
+    let match = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      [, year, month, day] = match;
+      year = Number(year);
+      month = Number(month);
+      day = Number(day);
+    } else {
+      match = dateValue.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\b/);
+      if (match) {
+        day = Number(match[1]);
+        month = months.findIndex((name) => name.toLowerCase() === match[2].toLowerCase()) + 1;
+        year = Number(match[3]);
+      } else {
+        match = dateValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (match) {
+          day = Number(match[1]);
+          month = Number(match[2]);
+          year = Number(match[3]);
+        } else {
+          const parsedDate = new Date(value);
+          if (Number.isNaN(parsedDate.getTime())) return '-';
+          year = parsedDate.getUTCFullYear();
+          month = parsedDate.getUTCMonth() + 1;
+          day = parsedDate.getUTCDate();
+        }
+      }
+    }
+  }
+
+  const validatedDate = new Date(Date.UTC(year, month - 1, day));
+  if (validatedDate.getUTCFullYear() !== year
+    || validatedDate.getUTCMonth() + 1 !== month
+    || validatedDate.getUTCDate() !== day) return '-';
+  return `${String(day).padStart(2, '0')} ${months[month - 1]} ${year}`;
+}
+
 function formatMoney(value) {
   if (isMissing(value)) return '-';
   const amount = Number(value);
@@ -93,8 +144,8 @@ function mapCreditDetailsMovements(history = []) {
     permanentYes: movement.PERMANENT === 'Yes',
     temporary: valueOrDash(movement.TEMPORARY),
     temporaryYes: movement.TEMPORARY === 'Yes',
-    validFrom: valueOrDash(movement.VALID_FROM),
-    validTo: valueOrDash(movement.VALID_TO),
+    validFrom: formatAdjustmentDate(movement.VALID_FROM),
+    validTo: formatAdjustmentDate(movement.VALID_TO),
     currentCycle: isCurrentCycle(movement.CURRENT_CYCLE),
     sorting: Number(movement.SORTING) || 0,
   })));
@@ -189,8 +240,8 @@ function mapRequestToEmailModel(request, dear = '-', approvalHistory = []) {
     creditRating: valueOrDash(request.approvedRating?.NAME),
     temporaryYes: isEnabled(request.IS_TEMPORARY_APPROVED),
     permanentYes: isEnabled(request.IS_PERMANENT_APPROVED),
-    validFrom: formatDate(request.APPROVED_VALID_FROM),
-    validTo: formatDate(request.APPROVED_VALID_TO),
+    validFrom: formatAdjustmentDate(request.APPROVED_VALID_FROM),
+    validTo: formatAdjustmentDate(request.APPROVED_VALID_TO),
     clearOutstandingBalanceYes: approvedCreditMovement?.clearOutstandingBalanceYes || false,
     withinApprovedLimitYes: approvedCreditMovement?.withinApprovedLimitYes || false,
     bankGuaranteeAmount: approvedCreditMovement?.bankGuaranteeAmount || '-',

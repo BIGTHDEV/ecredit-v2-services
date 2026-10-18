@@ -1,7 +1,7 @@
 const express = require('express');
-const rateLimit = require('express-rate-limit');
 const config = require('../config/env');
 const authenticationMiddleware = require('../middlewares/authentication');
+const companyInfoLookupLimiter = require('../middlewares/companyInfoLookupLimiter');
 const requestController = require('../controllers/requestController');
 const attachmentController = require('../controllers/attachmentController');
 const eventLogController = require('../controllers/eventLogController');
@@ -11,17 +11,6 @@ const emailController = require('../controllers/emailController');
 const crmSimulationController = require('../controllers/crmSimulationController');
 
 const router = express.Router();
-
-const companyInfoLookupLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: { code: 'RATE_LIMITED', message: 'Too many company information searches. Please try again later.' },
-  },
-});
 
 if (!config.isProduction()) {
   router.get('/simulate-crm-request/identifiers', authenticationMiddleware, crmSimulationController.getSimulationIdentifiers);

@@ -213,7 +213,7 @@ function approvalActionsFor(requestId, approvers) {
     }).flat();
 }
 
-async function sendRequestWorkflowNotification({ event, requestId, environment, actorEmail, actorName, user, transporter, auditActorCode }) {
+async function sendRequestWorkflowNotification({ event, requestId, environment, actorEmail, actorName, user, transporter, auditActorCode, deliveryEmail, requireDeliveryEmail = false }) {
     const eventConfig = EVENT_CONFIG[event];
     if (!eventConfig) throw new Error(`Unsupported workflow email event: ${event}`);
     const normalizedEnvironment = String(environment || '').trim().toLowerCase();
@@ -250,6 +250,11 @@ async function sendRequestWorkflowNotification({ event, requestId, environment, 
     } catch (error) {
         logger.error(`Workflow in-app notification failed for request ${requestId}: ${error.message}`);
     }
+    // DEV/QAS email-link actions only deliver test emails to the signed-in user who clicked.
+    if (requireDeliveryEmail && normalizedEnvironment !== 'prd' && !String(deliveryEmail || '').trim()) {
+        logger.warn(`Workflow email skipped for request ${requestId}: no signed-in user for ${normalizedEnvironment.toUpperCase()} email delivery.`);
+        return { skipped: true, emailSkipped: true, reason: 'NO_SIGNED_IN_USER' };
+    }
     const subject =  event === 'submit' || event === 'approve'
         ? buildApprovalSubject(emailModel)
         : event === 'final'
@@ -264,7 +269,7 @@ async function sendRequestWorkflowNotification({ event, requestId, environment, 
                         ? buildBackwardSubject(emailModel)
             : eventConfig.subject;
     if (!approvalApprovers.length) {
-        return sendRequestWorkflowEmail({ environment: normalizedEnvironment, template: eventConfig.template, subject, emailModel, recipients, actorEmail, transporter, requestId, user, auditActorCode });
+        return sendRequestWorkflowEmail({ environment: normalizedEnvironment, template: eventConfig.template, subject, emailModel, recipients, actorEmail, deliveryEmail, transporter, requestId, user, auditActorCode });
     }
 
     return Promise.all(approvalApprovers.map(async (approver) => {
@@ -277,6 +282,7 @@ async function sendRequestWorkflowNotification({ event, requestId, environment, 
             emailModel: approverModel,
             recipients: { to: [String(approver.APPROVER_EMAIL || '').trim()], cc: [] },
             actorEmail,
+            deliveryEmail,
             transporter,
             requestId,
             user,

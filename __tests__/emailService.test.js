@@ -240,6 +240,35 @@ describe('emailService', () => {
     }));
   });
 
+  test.each(['dev', 'qas'])('sends to the explicit delivery email in %s instead of the audit actor user', async (environment) => {
+    const transporter = createTransporter();
+    await createEmailService({ environment, transporter }).sendEmail({
+      template: 'request-completed',
+      subject: 'Workflow',
+      model,
+      recipients: { to: ['next-approver@example.com'], cc: [] },
+      actorEmail: 'approver@example.com',
+      deliveryEmail: 'signed-in@example.com',
+      user: { profile: { LOGGED_IN_EMAIL: 'approver@example.com' } },
+    });
+
+    expect(transporter.sendMail.mock.calls[0][0]).toEqual(expect.objectContaining({ to: ['signed-in@example.com'], cc: [] }));
+  });
+
+  test('ignores the delivery email in PRD', async () => {
+    const transporter = createTransporter();
+    await createEmailService({ environment: 'prd', bcc: 'audit@example.com', transporter }).sendEmail({
+      template: 'request-completed',
+      subject: 'Workflow',
+      model,
+      recipients: { to: ['next-approver@example.com'], cc: [] },
+      actorEmail: 'approver@example.com',
+      deliveryEmail: 'signed-in@example.com',
+    });
+
+    expect(transporter.sendMail.mock.calls[0][0].to).toEqual(['next-approver@example.com']);
+  });
+
   test('does not add test recipient details to PRD template context', async () => {
     const transporter = createTransporter();
     await createEmailService({ environment: 'prd', transporter }).sendEmail({

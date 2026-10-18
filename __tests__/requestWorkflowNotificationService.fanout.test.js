@@ -1,6 +1,6 @@
 /* eslint-env jest */
 
-jest.mock('../config/logger', () => ({ error: jest.fn() }));
+jest.mock('../config/logger', () => ({ error: jest.fn(), warn: jest.fn() }));
 jest.mock('../config/env', () => ({ frontendBaseUrl: 'https://frontend.example.com' }));
 jest.mock('../services/requestService', () => ({ listApprovalHistory: jest.fn() }));
 jest.mock('../services/requestEmailModelService', () => ({ getRequestEmailModel: jest.fn() }));
@@ -150,6 +150,66 @@ describe('parallel workflow notifications', () => {
     });
 
     expect(sendRequestWorkflowEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('delivers DEV email-link approval emails to the signed-in user while keeping the approver actor', async () => {
+    listApprovalHistory.mockResolvedValue([approval({ APPROVER_EMAIL: 'next@example.com' })]);
+
+    await sendRequestWorkflowNotification({
+      event: 'approve',
+      requestId: 'request-1',
+      environment: 'dev',
+      actorEmail: 'approver@example.com',
+      actorName: 'APPROVER',
+      auditActorCode: '2001',
+      deliveryEmail: 'tester@example.com',
+      requireDeliveryEmail: true,
+      transporter: {},
+    });
+
+    expect(createWorkflowNotifications.mock.calls[0][0]).toMatchObject({ actorEmail: 'approver@example.com', actorCode: 2001 });
+    expect(sendRequestWorkflowEmail).toHaveBeenCalledWith(expect.objectContaining({
+      recipients: { to: ['next@example.com'], cc: [] },
+      actorEmail: 'approver@example.com',
+      deliveryEmail: 'tester@example.com',
+      auditActorCode: '2001',
+    }));
+  });
+
+  it('skips DEV email-link approval emails when no user is signed in but still creates in-app notifications', async () => {
+    listApprovalHistory.mockResolvedValue([approval()]);
+
+    const result = await sendRequestWorkflowNotification({
+      event: 'approve',
+      requestId: 'request-1',
+      environment: 'dev',
+      actorEmail: 'approver@example.com',
+      actorName: 'APPROVER',
+      auditActorCode: '2001',
+      requireDeliveryEmail: true,
+      transporter: {},
+    });
+
+    expect(result).toEqual({ skipped: true, emailSkipped: true, reason: 'NO_SIGNED_IN_USER' });
+    expect(createWorkflowNotifications).toHaveBeenCalledTimes(1);
+    expect(sendRequestWorkflowEmail).not.toHaveBeenCalled();
+  });
+
+  it('still sends PRD email-link approval emails to the real approver without a signed-in user', async () => {
+    listApprovalHistory.mockResolvedValue([approval({ APPROVER_EMAIL: 'next@example.com' })]);
+
+    await sendRequestWorkflowNotification({
+      event: 'approve',
+      requestId: 'request-1',
+      environment: 'prd',
+      actorEmail: 'approver@example.com',
+      actorName: 'APPROVER',
+      requireDeliveryEmail: true,
+      transporter: {},
+    });
+
+    expect(sendRequestWorkflowEmail).toHaveBeenCalledTimes(1);
+    expect(sendRequestWorkflowEmail.mock.calls[0][0].recipients.to).toEqual(['next@example.com']);
   });
 
   it('sends backward notifications to BDS Review and copies the current-cycle backward approver', () => {

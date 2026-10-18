@@ -109,7 +109,13 @@ describe('emailApprovalActionService request status guard', () => {
       .mockResolvedValueOnce([{ TOTAL: 1 }]));
     getDatabase.mockReturnValue(database);
 
-    await confirmEmailApprovalAction('token', '');
+    await expect(confirmEmailApprovalAction('token', '')).resolves.toEqual(expect.objectContaining({
+      requestId: 'request-1',
+      action: 'approve',
+      approverId: '1001',
+      approverEmail: 'approver@example.com',
+      approverName: 'Approver',
+    }));
 
     expect(database.query.mock.calls[1][0]).toContain('TB4.STATUS_ID');
     expect(database.query.mock.calls[1][1].replacements).toEqual(expect.objectContaining({

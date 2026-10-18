@@ -164,7 +164,7 @@ async function resolveDraftRecipients(requestId, transaction) {
 }
 
 function createEmailService({ environment = config.environment, bcc = config.email.bcc, transporter } = {}) {
-  async function sendEmail({ template, subject, model, recipients, actorEmail, requestId, user, resendOf, effectiveRecipients, effectiveBcc, intendedRecipients, auditActorCode, reminderContext, transaction }) {
+  async function sendEmail({ template, subject, model, recipients, actorEmail, deliveryEmail, requestId, user, resendOf, effectiveRecipients, effectiveBcc, intendedRecipients, auditActorCode, reminderContext, transaction }) {
     const normalizedEnvironment = String(environment).toLowerCase();
     if (!SUPPORTED_ENVIRONMENTS.has(normalizedEnvironment)) throw new Error('Unsupported email environment.');
     if (missingValue(subject)) throw new Error('subject is required.');
@@ -177,7 +177,7 @@ function createEmailService({ environment = config.environment, bcc = config.ema
       model = { ...model, dear: 'Credit Team' };
     }
     const resolveActorEmail = normalizedEnvironment === 'prd' ? actorEmail
-      : (user ? (user.profile?.LOGGED_IN_EMAIL || user.email) : actorEmail);
+      : (deliveryEmail || (user ? (user.profile?.LOGGED_IN_EMAIL || user.email) : actorEmail));
     const resolvedRecipients = normalizedEnvironment === 'prd'
       ? (effectiveRecipients || resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail))
       : resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail);

@@ -237,6 +237,7 @@ async function confirmEmailApprovalAction(token, comment) {
       requestId: String(payload.requestId),
       action: payload.action,
       isFinalApproval,
+      approverId: String(approval.APPROVER_ID),
       approverEmail: approval.APPROVER_EMAIL || '',
       approverName: approval.APPROVER_NAME || '',
     };

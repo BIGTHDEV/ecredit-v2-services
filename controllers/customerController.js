@@ -1,6 +1,9 @@
 const logger = require('../config/logger');
 const customerService = require('../services/customerService');
+const customerLogService = require('../services/customerLogService');
+const companyInfoSuggestionService = require('../services/powerPlatformCompanyInfoService');
 const { effectiveEmployeeCode } = require('../helpers/userIdentity');
+const { companyInfoUserName, companyInfoUserEmail } = require('../helpers/companyInfoUser');
 
 async function listCustomers(req, res, next) {
   try {
@@ -80,6 +83,87 @@ async function customerTaxNoExists(req, res, next) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.status(200).json({ success: true, data, correlationId: res.locals.correlationId || 'N/A' });
   } catch (error) {
+    next(error);
+  }
+}
+
+async function recordCompanyInfoLookupBestEffort(entry, correlationId) {
+  if (!entry.customerId) return;
+  try {
+    await customerLogService.recordCompanyInfoLookup(entry);
+  } catch (error) {
+    logger.error(`Failed to record company information lookup customer log: ${error.message}`, {
+      correlationId,
+      payload: { customerId: entry.customerId },
+      stack: error.stack,
+    });
+  }
+}
+
+async function suggestCustomerCompanyInfo(req, res, next) {
+  const correlationId = res.locals.correlationId || 'N/A';
+  let lookupLog = null;
+  try {
+    const taxId = req.body?.taxId;
+    if (typeof taxId !== 'string' || !/^\d{13}$/.test(taxId)) {
+      const error = new Error('Tax ID must contain exactly 13 digits.');
+      error.statusCode = 400;
+      error.code = 'INVALID_TAX_ID';
+      throw error;
+    }
+
+    const customerId = req.body?.customerId;
+    if (customerId !== undefined && customerId !== null
+      && (typeof customerId !== 'string' || !customerId.trim() || customerId.length > 128)) {
+      const error = new Error('Customer ID is invalid.');
+      error.statusCode = 400;
+      error.code = 'INVALID_INPUT';
+      throw error;
+    }
+
+    const profile = req.user?.profile;
+    const employeeCode = effectiveEmployeeCode(profile);
+    if (!Number.isInteger(employeeCode)) {
+      const error = new Error('Authenticated user profile is missing a numeric employee code.');
+      error.statusCode = 403;
+      error.code = 'FORBIDDEN';
+      throw error;
+    }
+
+    if (customerId) {
+      await customerLogService.assertActiveCustomer(customerId);
+      lookupLog = { customerId, taxNo: taxId, actorId: employeeCode };
+    }
+
+    const data = await companyInfoSuggestionService.suggestCompanyInfo(taxId, {
+      userEmail: companyInfoUserEmail(req),
+      userName: companyInfoUserName(profile),
+      onRequestPayload: (payload) => {
+        if (lookupLog) lookupLog.outboundPayload = payload;
+        res.locals.outboundRequests = [{
+          system: 'Power Platform',
+          method: 'POST',
+          body: payload,
+        }];
+      },
+    });
+    if (lookupLog) await recordCompanyInfoLookupBestEffort({ ...lookupLog, result: data }, correlationId);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.status(200).json({ success: true, data, correlationId });
+
+    logger.info('Customer company information suggestions generated', {
+      correlationId,
+      route: { method: req.method, path: req.path },
+      payload: { customerId: customerId || null, sourceCount: data.sources.length },
+    });
+  } catch (error) {
+    if (lookupLog) await recordCompanyInfoLookupBestEffort({ ...lookupLog, error }, correlationId);
+    logger.error(`Error in suggestCustomerCompanyInfo: ${error.message}`, {
+      correlationId: res.locals.correlationId,
+      route: { method: req.method, path: req.path },
+      errorCode: error.code,
+      stack: error.stack,
+    });
     next(error);
   }
 }
@@ -169,6 +253,7 @@ module.exports = {
   listEnabledSizes,
   searchSoldToCustomers,
   customerTaxNoExists,
+  suggestCustomerCompanyInfo,
   getCustomer,
   createCustomer,
   updateCustomer,

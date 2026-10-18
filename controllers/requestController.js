@@ -6,18 +6,7 @@ const { sendRequestCompletedEmail } = require('../emails/requestCompletedEmail')
 const { notifyBestEffort } = require('../services/requestWorkflowNotificationService');
 const { isSystemAdminRole } = require('../helpers/roleAuthorization');
 const { effectiveEmployeeCode, approvalAuditEmployeeCode } = require('../helpers/userIdentity');
-
-function companyInfoUserName(profile) {
-  const initials = String(profile?.LOGGED_IN_INITIALS || profile?.INITIALS || '').trim();
-  const fullName = String(profile?.LOGGED_IN_FULL_NAME || profile?.FULL_NAME || '')
-    .trim()
-    .replace(/^(?:mr|mrs|ms|miss|dr|prof)\.?\s+/i, '');
-  if (initials && fullName) return `${initials} (${fullName})`;
-
-  return String(profile?.LOGGED_IN_USERNAME
-    || (!profile?.IS_VIEWING_AS ? profile?.USERNAME : '')
-    || '').trim();
-}
+const { companyInfoUserName, companyInfoUserEmail } = require('../helpers/companyInfoUser');
 
 async function listRequests(req, res, next) {
   try {
@@ -110,7 +99,7 @@ async function suggestRequestCustomerInfo(req, res, next) {
       throw error;
     }
 
-    const userEmail = String(profile?.LOGGED_IN_EMAIL || req.user?.email || profile?.EMAIL || '').trim();
+    const userEmail = companyInfoUserEmail(req);
     const userName = companyInfoUserName(profile);
     const data = await companyInfoSuggestionService.suggestCompanyInfo(taxId, {
       userEmail,

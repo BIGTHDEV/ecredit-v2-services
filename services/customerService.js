@@ -1,6 +1,7 @@
 const { Op, QueryTypes, fn, col, where, literal } = require('sequelize');
 const { randomUUID } = require('crypto');
 const { getModels } = require('../models');
+const logger = require('../config/logger');
 const customerLogService = require('./customerLogService');
 
 const QUICK_FILTER_SIZE_IDS = {
@@ -38,6 +39,18 @@ const LATEST_REQUEST_FIELD = (field) => `(
   FROM REQUESTS R
   WHERE R.CUSTOMER_TAX_NO = Customer.TAX_NO
   ORDER BY R.UPDATED_DATE DESC, R.CREATED_DATE DESC
+)`;
+
+// Prefer the name captured on the latest request (same source as SOLD_TO), then fall back to CRM.
+const CUSTOMER_LOCALIZED_NAME = (requestField, crmField) => `COALESCE(
+  NULLIF(LTRIM(RTRIM(${LATEST_REQUEST_FIELD(requestField)})), '') COLLATE DATABASE_DEFAULT,
+  (
+    SELECT TOP (1) LTRIM(RTRIM(SC.${crmField})) COLLATE DATABASE_DEFAULT
+    FROM S_CUSTOMER SC
+    WHERE SC.TAX_NO = Customer.TAX_NO
+      AND NULLIF(LTRIM(RTRIM(SC.${crmField})), '') IS NOT NULL
+    ORDER BY LEN(SC.${crmField}) ASC, SC.${crmField} ASC
+  )
 )`;
 
 function salesGroupName(code) {
@@ -150,6 +163,8 @@ function buildAttributes() {
   return {
     include: [
       [literal(CUSTOMER_NAME_SUBQUERY), 'CUSTOMER_NAME'],
+      [literal(CUSTOMER_LOCALIZED_NAME('CUSTOMER_NAME_TH', 'CUST_NAME_THAI')), 'CUSTOMER_NAME_TH'],
+      [literal(CUSTOMER_LOCALIZED_NAME('CUSTOMER_NAME_ENG', 'CUST_NAME_ENG')), 'CUSTOMER_NAME_ENG'],
       [literal(LATEST_REQUEST_FIELD('SOLD_TO')), 'SOLD_TO'],
       [literal(LATEST_REQUEST_FIELD('REQUESTED_SALES_GROUP')), 'SALES_GROUP_CODE'],
       [literal(LATEST_REQUEST_FIELD('CUSTOMER_PHONE')), 'PHONE'],
@@ -224,6 +239,8 @@ function mapCustomer(customer) {
     id: customer.ID,
     TAX_NO: customer.TAX_NO || '',
     CUSTOMER_NAME: customer.get('CUSTOMER_NAME') || '',
+    CUSTOMER_NAME_TH: customer.get('CUSTOMER_NAME_TH') || '',
+    CUSTOMER_NAME_ENG: customer.get('CUSTOMER_NAME_ENG') || '',
     SOLD_TO: customer.get('SOLD_TO') || '',
     SALES_GROUP: salesGroupName(customer.get('SALES_GROUP_CODE')),
     PHONE: customer.get('PHONE') || '',
@@ -291,7 +308,18 @@ async function getCustomerById(id) {
     attributes: buildAttributes(),
   });
 
-  return customer ? mapCustomer(customer) : null;
+  if (!customer) return null;
+
+  const mapped = mapCustomer(customer);
+  // Lazy require keeps the customer service free of requestService's dependency graph at load time.
+  const { getCompanyCode } = require('./requestService');
+  try {
+    mapped.COMPANY_CODE = await getCompanyCode(mapped.SOLD_TO);
+  } catch (error) {
+    logger.warn(`Unable to resolve company code for customer ${id}: ${error.message}`);
+    mapped.COMPANY_CODE = '';
+  }
+  return mapped;
 }
 
 function validationError(message) {
@@ -382,10 +410,13 @@ async function searchSoldToCustomers(search, salesGroup) {
     `SELECT TOP (50)
        SOLDTO_NO,
        SOLDTO_NAME_ENG,
+       SOLDTO_NAME_THAI,
        CUST_PHONE,
        CUST_FAX,
        ADDRESS_ENG_SOLDTO,
-       TAX_NO
+       TAX_NO,
+       COMPANY_CODE,
+       COMPANY_NAME
      FROM S_vw_CustomerShipTo
      WHERE SALE_GROUP = :salesGroup
        AND (SOLDTO_NO LIKE :search OR SOLDTO_NAME_ENG LIKE :search)
@@ -396,6 +427,10 @@ async function searchSoldToCustomers(search, salesGroup) {
   return rows.map((row) => ({
     SOLDTO_NO: String(row.SOLDTO_NO || ''),
     SOLDTO_NAME_ENG: String(row.SOLDTO_NAME_ENG || ''),
+    SOLDTO_NAME_TH: String(row.SOLDTO_NAME_THAI || '').trim(),
+    COMPANY_CODE: [String(row.COMPANY_CODE || '').trim(), String(row.COMPANY_NAME || '').trim()]
+      .filter(Boolean)
+      .join(' - '),
     CUST_PHONE: String(row.CUST_PHONE || ''),
     CUST_FAX: String(row.CUST_FAX || ''),
     ADDRESS_ENG_SOLDTO: String(row.ADDRESS_ENG_SOLDTO || ''),

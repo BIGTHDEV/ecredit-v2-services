@@ -1,6 +1,7 @@
 const express = require('express');
 const authenticationMiddleware = require('../middlewares/authentication');
 const customerAccessMiddleware = require('../middlewares/customerAccess');
+const companyInfoLookupLimiter = require('../middlewares/companyInfoLookupLimiter');
 const customerController = require('../controllers/customerController');
 const customerLogController = require('../controllers/customerLogController');
 
@@ -12,6 +13,7 @@ router.get('/', customerController.listCustomers);
 router.get('/sizes', customerController.listEnabledSizes);
 router.get('/sold-to', customerController.searchSoldToCustomers);
 router.get('/tax-no-exists', customerController.customerTaxNoExists);
+router.post('/company-info-suggestions', companyInfoLookupLimiter, customerController.suggestCustomerCompanyInfo);
 router.post('/', customerController.createCustomer);
 router.get('/:id/customer-logs', customerLogController.listCustomerLogs);
 router.get('/:id/customer-logs/:logId', customerLogController.getCustomerLog);

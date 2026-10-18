@@ -180,8 +180,8 @@ describe('requestEmailModelService', () => {
       creditRating: '-',
       temporaryYes: true,
       permanentYes: false,
-      validFrom: '06 Aug 2026, 12:00 AM',
-      validTo: '30 Aug 2026, 12:00 AM',
+      validFrom: '06 Aug 2026',
+      validTo: '30 Aug 2026',
     });
     expect(model.creditDetailsSummary).toEqual([
       { stepName: 'Requester', step: 1, approver: 'BAE', status: 'Requested', isCurrentStep: false, isLastActionedStep: false },
@@ -210,8 +210,8 @@ describe('requestEmailModelService', () => {
       creditRating: 'A (Low Risk)',
       temporaryYes: true,
       permanentYes: false,
-      validFrom: '01/09/2026',
-      validTo: '31/12/2026',
+      validFrom: '01 Sep 2026',
+      validTo: '31 Dec 2026',
     }));
     expect(model.hideLastActionedDetails).toBe(false);
   });

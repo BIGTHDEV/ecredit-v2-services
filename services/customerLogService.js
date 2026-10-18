@@ -107,6 +107,49 @@ async function recordCustomerMutation({
   }, { transaction });
 }
 
+async function recordCompanyInfoLookup({
+  customerId,
+  taxNo,
+  actorId,
+  outboundPayload,
+  result,
+  error,
+}) {
+  const createdBy = Number(actorId);
+  if (!Number.isSafeInteger(createdBy)) {
+    throw new Error('A valid employee code is required to record a customer log.');
+  }
+  const { CustomerLog } = getModels();
+  const succeeded = !error;
+  const description = JSON.stringify({
+    operation: 'lookup',
+    action: 'lookup',
+    source: 'Find Company Data',
+    customerId,
+    taxNo,
+    status: succeeded ? 'success' : 'failed',
+    ...(outboundPayload ? { request: outboundPayload } : {}),
+    ...(succeeded
+      ? { response: { fields: result?.fields ?? {}, sources: result?.sources ?? [] } }
+      : { error: { code: error.code || 'UNKNOWN_ERROR', message: error.message } }),
+  });
+
+  return CustomerLog.create({
+    ID: randomUUID(),
+    TAX_NO: taxNo,
+    NAME: succeeded ? 'Company data searched' : 'Company data search failed',
+    DESCRIPTION: description,
+    LOG_TYPE_ID: succeeded ? LOG_TYPE_IDS.success : LOG_TYPE_IDS.error,
+    CUSTOMER_ID: customerId,
+    CATEGORY: 'customer.company-info-lookup',
+    CREATED_DATE: CustomerLog.sequelize.fn('GETDATE'),
+    UPDATED_DATE: CustomerLog.sequelize.fn('GETDATE'),
+    CREATED_BY: createdBy,
+    UPDATED_BY: createdBy,
+    ENABLED: true,
+  });
+}
+
 function normalizePage(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
@@ -233,4 +276,10 @@ async function getCustomerLog(customerId, logId) {
   return mapCustomerLog(log, true);
 }
 
-module.exports = { getCustomerLog, listCustomerLogs, recordCustomerMutation };
+module.exports = {
+  assertActiveCustomer,
+  getCustomerLog,
+  listCustomerLogs,
+  recordCompanyInfoLookup,
+  recordCustomerMutation,
+};
