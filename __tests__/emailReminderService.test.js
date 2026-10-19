@@ -31,6 +31,7 @@ const { getRequestEmailModel } = require('../services/requestEmailModelService')
 const { listApprovalHistory } = require('../services/requestService');
 const { listSettings } = require('../services/emailReminderConfigService');
 const { buildDescription } = require('../services/emailLogService');
+const { createEmailApprovalToken } = require('../services/emailApprovalActionService');
 const {
   approvalIdFromLog, reminderKey, getEligibility, isDue, processReminder, runEmailReminders, startEmailReminderScheduler,
   previewReminderRequests,
@@ -212,15 +213,41 @@ describe('approval identity', () => {
   });
 
   test('supports expired but valid signed links from historical logs', () => {
-    const token = jwt.sign({ type: 'ecredit-email-approval', requestId: 'request', approvalId: 'approval' }, config.jwt.secret, { expiresIn: -1 });
+    const token = jwt.sign({
+      type: 'ecredit-email-approval', requestId: 'request', approvalId: 'approval',
+      approverId: '1001', action: 'approve',
+    }, config.jwt.secret, { expiresIn: -1 });
     expect(approvalIdFromLog(source, { model: { approvalActions: [{ url: `https://example.com/email-approval/${token}` }] } })).toBe('approval');
+  });
+
+  test('reads compact signed links and keeps the JWT segment below HTTP.sys default limit', () => {
+    const requestId = '43440878-4500-411e-8ce9-2118afd7ccd8';
+    const approvalId = '8893e019-db4a-4a51-9fe0-edd57a64f975';
+    const token = createEmailApprovalToken({
+      requestId,
+      approvalId,
+      approverId: '9223372036854775807',
+      action: 'approve',
+    });
+    const currentSource = { ...source, REQUEST_ID: requestId };
+
+    expect(token.length).toBeLessThan(260);
+    expect(approvalIdFromLog(currentSource, {
+      model: { approvalActions: [{ url: `https://example.com/email-approval/${token}` }] },
+    })).toBe(approvalId);
   });
 
   test('rejects missing, forged, or cross-request approval links', () => {
     expect(() => approvalIdFromLog(source, {})).toThrow('no approval identity');
-    const token = jwt.sign({ type: 'ecredit-email-approval', requestId: 'other', approvalId: 'approval' }, config.jwt.secret);
+    const token = jwt.sign({
+      type: 'ecredit-email-approval', requestId: 'other', approvalId: 'approval',
+      approverId: '1001', action: 'approve',
+    }, config.jwt.secret);
     expect(() => approvalIdFromLog(source, { model: { approvalActions: [{ url: `https://example.com/email-approval/${token}` }] } })).toThrow('invalid approval identity');
-    const forged = jwt.sign({ type: 'ecredit-email-approval', requestId: 'request', approvalId: 'approval' }, 'wrong-secret');
+    const forged = jwt.sign({
+      type: 'ecredit-email-approval', requestId: 'request', approvalId: 'approval',
+      approverId: '1001', action: 'approve',
+    }, 'wrong-secret');
     expect(() => approvalIdFromLog(source, { model: { approvalActions: [{ url: `https://example.com/email-approval/${forged}` }] } })).toThrow();
   });
 });

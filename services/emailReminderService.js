@@ -1,5 +1,4 @@
 const { createHash } = require('crypto');
-const jwt = require('jsonwebtoken');
 const { Op, QueryTypes, literal } = require('sequelize');
 const config = require('../config/env');
 const logger = require('../config/logger');
@@ -11,6 +10,7 @@ const { sendEmail, resolveRecipients } = require('./emailService');
 const { getRequestEmailModel } = require('./requestEmailModelService');
 const { listApprovalHistory } = require('./requestService');
 const { pendingApprovers, approvalActionsFor } = require('./requestWorkflowNotificationService');
+const { verifyEmailApprovalToken } = require('./emailApprovalActionService');
 
 const DRAFT_STATUS_ID = 'db8b3768-8466-4974-8dff-4c374b16a639';
 const WAITING_STATUS_ID = '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b';
@@ -32,7 +32,7 @@ function approvalIdFromLog(source, parameters) {
   const link = parameters.model?.approvalActions?.[0]?.url;
   if (!link) throw new Error(`Approval email ${source.ID} has no approval identity; reminder was not sent.`);
   const token = decodeURIComponent(new URL(link).pathname.split('/').pop());
-  const payload = jwt.verify(token, config.jwt.secret, { ignoreExpiration: true });
+  const payload = verifyEmailApprovalToken(token, { ignoreExpiration: true });
   if (payload.type !== 'ecredit-email-approval' || String(payload.requestId) !== String(source.REQUEST_ID) || !payload.approvalId) {
     throw new Error(`Approval email ${source.ID} has an invalid approval identity.`);
   }

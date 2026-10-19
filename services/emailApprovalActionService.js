@@ -1,5 +1,4 @@
 const jwt = require('jsonwebtoken');
-const { randomUUID } = require('crypto');
 const config = require('../config/env');
 const { getDatabase } = require('../config/database');
 const { QueryTypes } = require('sequelize');
@@ -13,6 +12,8 @@ const ACTION_TYPE_IDS = {
   backward: 'b76065cc-6507-458d-94ce-87231cbaa57c',
 };
 const ACTIONS = new Set(Object.keys(ACTION_TYPE_IDS));
+const COMPACT_ACTION_CODES = { approve: 'a', reject: 'r', backward: 'b' };
+const ACTIONS_BY_COMPACT_CODE = { a: 'approve', r: 'reject', b: 'backward' };
 
 function actionError(message, code = 'EMAIL_APPROVAL_EXPIRED', statusCode = 410) {
   const error = new Error(message);
@@ -21,25 +22,54 @@ function actionError(message, code = 'EMAIL_APPROVAL_EXPIRED', statusCode = 410)
   return error;
 }
 
+function encodeGuid(value) {
+  const hex = String(value).replace(/-/g, '');
+  if (!/^[0-9a-f]{32}$/i.test(hex)) throw new Error('Email approval IDs must be GUIDs.');
+  return Buffer.from(hex, 'hex').toString('base64url');
+}
+
+function decodeGuid(value) {
+  if (typeof value !== 'string') throw new Error('Invalid email approval ID.');
+  const bytes = Buffer.from(value, 'base64url');
+  if (bytes.length !== 16 || bytes.toString('base64url') !== value) {
+    throw new Error('Invalid email approval ID.');
+  }
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function createEmailApprovalToken({ requestId, approvalId, approverId, action, expiresIn = '7d' }) {
   if (!ACTIONS.has(action)) throw new Error('Unsupported email approval action.');
   return jwt.sign({
-    type: 'ecredit-email-approval',
-    requestId,
-    approvalId,
-    approverId: String(approverId),
-    action,
-    jti: randomUUID(),
-  }, config.jwt.secret, { expiresIn });
+    v: 2,
+    r: encodeGuid(requestId),
+    a: encodeGuid(approvalId),
+    p: String(approverId),
+    x: COMPACT_ACTION_CODES[action],
+  }, config.jwt.secret, { expiresIn, noTimestamp: true });
 }
 
-function verifyEmailApprovalToken(token) {
+function verifyEmailApprovalToken(token, { ignoreExpiration = false } = {}) {
   try {
-    const payload = jwt.verify(token, config.jwt.secret);
-    if (payload.type !== 'ecredit-email-approval' || !ACTIONS.has(payload.action)) {
+    const payload = jwt.verify(token, config.jwt.secret, { ignoreExpiration });
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('Invalid token payload.');
+    }
+    if (payload.type === 'ecredit-email-approval' && ACTIONS.has(payload.action)) {
+      return payload;
+    }
+    const action = ACTIONS_BY_COMPACT_CODE[payload.x];
+    if (payload.v !== 2 || !action || typeof payload.p !== 'string' || !payload.p) {
       throw new Error('Invalid token type.');
     }
-    return payload;
+    return {
+      ...payload,
+      type: 'ecredit-email-approval',
+      requestId: decodeGuid(payload.r),
+      approvalId: decodeGuid(payload.a),
+      approverId: payload.p,
+      action,
+    };
   } catch (error) {
     throw actionError('This approval action has expired or is invalid.');
   }

@@ -3,6 +3,7 @@
 const jwt = require('jsonwebtoken');
 const { getDatabase } = require('../config/database');
 const {
+  createEmailApprovalToken,
   getEmailApprovalAction,
   confirmEmailApprovalAction,
 } = require('../services/emailApprovalActionService');
@@ -10,6 +11,10 @@ const {
 jest.mock('jsonwebtoken', () => ({
   verify: jest.fn(),
   sign: jest.fn(),
+}));
+
+jest.mock('../config/env', () => ({
+  jwt: { secret: 'approval-test-secret' },
 }));
 
 jest.mock('../config/database', () => ({
@@ -53,6 +58,23 @@ describe('emailApprovalActionService request status guard', () => {
     jwt.verify.mockReturnValue({ ...payload });
   });
 
+  it('creates compact, versioned tokens while preserving the action and expiry settings', () => {
+    createEmailApprovalToken({
+      requestId: '43440878-4500-411e-8ce9-2118afd7ccd8',
+      approvalId: '8893e019-db4a-4a51-9fe0-edd57a64f975',
+      approverId: '20100911',
+      action: 'approve',
+    });
+
+    expect(jwt.sign).toHaveBeenCalledWith({
+      v: 2,
+      r: 'Q0QIeEUAQR6M6SEYr9fM2A',
+      a: 'iJPgGdtKSlGf4O3VemT5dQ',
+      p: '20100911',
+      x: 'a',
+    }, expect.any(String), { expiresIn: '7d', noTimestamp: true });
+  });
+
   it('allows preview only while the request is Waiting-Approval', async () => {
     const database = createDatabase(jest.fn().mockResolvedValue([approval]));
     getDatabase.mockReturnValue(database);
@@ -67,6 +89,34 @@ describe('emailApprovalActionService request status guard', () => {
       expect.stringContaining('TB4.STATUS_ID'),
       expect.objectContaining({
         replacements: expect.objectContaining({ waitingStatusId: WAITING_APPROVAL_STATUS_ID }),
+      }),
+    );
+  });
+
+  it('decodes compact token claims before querying for the pending approval', async () => {
+    jwt.verify.mockReturnValue({
+      v: 2,
+      r: 'Q0QIeEUAQR6M6SEYr9fM2A',
+      a: 'iJPgGdtKSlGf4O3VemT5dQ',
+      p: '1001',
+      x: 'a',
+    });
+    const database = createDatabase(jest.fn().mockResolvedValue([approval]));
+    getDatabase.mockReturnValue(database);
+
+    await expect(getEmailApprovalAction('token')).resolves.toEqual(expect.objectContaining({
+      requestId: '43440878-4500-411e-8ce9-2118afd7ccd8',
+      approvalId: 'approval-1',
+      action: 'approve',
+      approverId: '1001',
+    }));
+    expect(database.query).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        replacements: expect.objectContaining({
+          requestId: '43440878-4500-411e-8ce9-2118afd7ccd8',
+          approvalId: '8893e019-db4a-4a51-9fe0-edd57a64f975',
+        }),
       }),
     );
   });
