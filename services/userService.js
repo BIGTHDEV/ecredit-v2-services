@@ -1,6 +1,11 @@
 const { Op, col, fn, QueryTypes, where } = require('sequelize');
 const { getDatabase } = require('../config/database');
 const { getModels } = require('../models');
+const {
+  getPresenceStatus,
+  getPresenceUserCodesByStatus,
+  getTrackedPresenceUserCodes,
+} = require('./sessionPresenceService');
 
 const SORT_FIELDS = {
   CODE: 'EMP_CODE',
@@ -48,6 +53,14 @@ function buildWhere(query) {
     if (!Number.isNaN(start.getTime())) {
       filters.push({ '$user.UPDATED_DATE$': { [Op.gte]: start, [Op.lt]: new Date(start.getTime() + 24 * 60 * 60 * 1000) } });
     }
+  }
+
+  const presenceStatus = String(query.PRESENCE_STATUS || '').trim().toUpperCase();
+  if (presenceStatus === 'ACTIVE' || presenceStatus === 'AWAY') {
+    filters.push({ EMP_CODE: { [Op.in]: getPresenceUserCodesByStatus(presenceStatus) } });
+  } else if (presenceStatus === 'OFFLINE') {
+    const trackedUserCodes = getTrackedPresenceUserCodes();
+    if (trackedUserCodes.length) filters.push({ EMP_CODE: { [Op.notIn]: trackedUserCodes } });
   }
 
   return filters.length ? { [Op.and]: filters } : undefined;
@@ -131,6 +144,7 @@ function mapUser(employee) {
     MANAGER_1: formatUserName(employee.manager1),
     MANAGER_2: formatUserName(employee.manager2),
     ROLES: [...new Set(roles)].join(', '),
+    PRESENCE_STATUS: getPresenceStatus(employee.EMP_CODE),
     UPDATED_DATE: formatUpdatedDate(user?.UPDATED_DATE),
     UPDATED_BY: formatUserName(user?.updatedByEmployee),
     SYSTEM_ACTIVE: isEnabled(user?.ENABLED),

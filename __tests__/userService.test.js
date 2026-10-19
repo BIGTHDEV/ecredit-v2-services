@@ -6,6 +6,7 @@ jest.mock('../config/database', () => ({ getDatabase: jest.fn() }));
 const { Op } = require('sequelize');
 const { getModels } = require('../models');
 const userService = require('../services/userService');
+const { recordPresence } = require('../services/sessionPresenceService');
 
 describe('userService', () => {
   it('returns audit fields and includes their employee relation in the user list', async () => {
@@ -25,6 +26,7 @@ describe('userService', () => {
       manager1: null,
       manager2: null,
     };
+    recordPresence({ userCode: '123', tabId: 'presence-user-service', active: true });
     const findAndCountAll = jest.fn().mockResolvedValue({ rows: [employee], count: 1 });
     const models = { Employee: { findAndCountAll }, User: {}, CostCenterMapping: {}, UserRole: {}, Role: {} };
     getModels.mockReturnValue(models);
@@ -51,6 +53,47 @@ describe('userService', () => {
     expect(result.items[0]).toMatchObject({
       UPDATED_DATE: '12 Oct 2026 10:29 AM',
       UPDATED_BY: 'NUC-nuttapongc',
+      PRESENCE_STATUS: 'ACTIVE',
     });
+  });
+
+  it('filters users by each live presence status before pagination', async () => {
+    const findAndCountAll = jest.fn().mockResolvedValue({ rows: [], count: 0 });
+    getModels.mockReturnValue({
+      Employee: { findAndCountAll },
+      User: {},
+      CostCenterMapping: {},
+      UserRole: {},
+      Role: {},
+    });
+    recordPresence({
+      userCode: 'presence-filter-active',
+      tabId: 'presence-filter-active-tab',
+      active: true,
+    });
+    recordPresence({
+      userCode: 'presence-filter-away',
+      tabId: 'presence-filter-away-tab',
+      active: false,
+    });
+
+    await userService.listUsers({ page: '1', pageSize: '25', PRESENCE_STATUS: 'ACTIVE' });
+
+    const activeOptions = findAndCountAll.mock.calls[0][0];
+    expect(activeOptions.where[Op.and][0].EMP_CODE[Op.in]).toContain('presence-filter-active');
+    expect(activeOptions.offset).toBe(0);
+    expect(activeOptions.limit).toBe(25);
+
+    await userService.listUsers({ page: '1', pageSize: '25', PRESENCE_STATUS: 'AWAY' });
+
+    const awayCodes = findAndCountAll.mock.calls[1][0].where[Op.and][0].EMP_CODE[Op.in];
+    expect(awayCodes).toContain('presence-filter-away');
+    expect(awayCodes).not.toContain('presence-filter-active');
+
+    await userService.listUsers({ page: '1', pageSize: '25', PRESENCE_STATUS: 'OFFLINE' });
+
+    const offlineCodes = findAndCountAll.mock.calls[2][0].where[Op.and][0].EMP_CODE[Op.notIn];
+    expect(offlineCodes).toContain('presence-filter-active');
+    expect(offlineCodes).toContain('presence-filter-away');
   });
 });

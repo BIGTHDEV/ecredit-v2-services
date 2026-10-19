@@ -16,5 +16,10 @@ const router = express.Router();
  * Requires: Valid Microsoft Entra ID access token
  */
 router.get('/ping', authenticationMiddleware, sessionController.ping);
+/**
+ * POST /{env}/api/session/presence
+ * Updates the authenticated user's in-memory active/away heartbeat.
+ */
+router.post('/presence', authenticationMiddleware, sessionController.updatePresence);
 
 module.exports = router;
