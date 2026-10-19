@@ -31,12 +31,12 @@ describe('userService.createUser per-user permissions', () => {
         findOne: jest.fn().mockResolvedValue(employeeRecord),
       },
       User: { findByPk: jest.fn().mockResolvedValue(null) },
-      Role: { findAll: jest.fn().mockResolvedValue([{ ID: 'role-a', ENABLED: '1' }]) },
+      Role: { findAll: jest.fn().mockResolvedValue([{ ID: 'role-a', ENABLED: '1', LEVEL: 2 }]) },
       RolePermission: { findAll: jest.fn().mockResolvedValue([{ PERMISSION_ID: 'view' }]) },
       Permission: { findAll: jest.fn().mockResolvedValue([{ ID: 'view' }, { ID: 'delete' }]) },
       UserPermission: { bulkCreate: userPermissionBulkCreate },
       CostCenterMapping: {},
-      UserRole: {},
+      UserRole: { findAll: jest.fn().mockResolvedValue([{ role: { LEVEL: 2 } }]) },
     };
     const database = {
       query,
@@ -66,9 +66,10 @@ describe('userService.createUser per-user permissions', () => {
     const models = {
       Employee: { findByPk: jest.fn().mockResolvedValue({ EMP_CODE: 'employee-1' }) },
       User: { findByPk: jest.fn().mockResolvedValue(null) },
-      Role: { findAll: jest.fn().mockResolvedValue([{ ID: 'role-a', ENABLED: '1' }]) },
+      Role: { findAll: jest.fn().mockResolvedValue([{ ID: 'role-a', ENABLED: '1', LEVEL: 2 }]) },
       RolePermission: { findAll: jest.fn().mockResolvedValue([{ PERMISSION_ID: 'view' }]) },
       Permission: { findAll: jest.fn().mockResolvedValue([{ ID: 'view' }, { ID: 'delete' }]) },
+      UserRole: { findAll: jest.fn().mockResolvedValue([{ role: { LEVEL: 2 } }]) },
     };
     getModels.mockReturnValue(models);
     getDatabase.mockReturnValue({ transaction: jest.fn() });

@@ -30,6 +30,26 @@ function mainActorCode(req) {
   return mainEmployeeCode(req.user?.profile);
 }
 
+function requireNotLoggedInUser(req, targetCode) {
+  const loggedInCode = mainActorCode(req);
+  if (loggedInCode && String(loggedInCode) === String(targetCode)) {
+    const error = new Error('You cannot modify your own user account.');
+    error.statusCode = 403;
+    error.code = 'FORBIDDEN';
+    throw error;
+  }
+}
+
+function requireSelfAccountActive(req, targetCode, enabled) {
+  const loggedInCode = mainActorCode(req);
+  if (enabled === false && loggedInCode && String(loggedInCode) === String(targetCode)) {
+    const error = new Error('You cannot set your own account inactive.');
+    error.statusCode = 403;
+    error.code = 'FORBIDDEN';
+    throw error;
+  }
+}
+
 function validatePermissionSelections(selections) {
   return Array.isArray(selections) && selections.length > 0 && selections.every((selection) => (
     selection && typeof selection.NAME === 'string' && selection.NAME.length > 0 && typeof selection.GRANTED === 'boolean'
@@ -48,6 +68,8 @@ async function listUsers(req, res, next) {
 async function updateSystemActive(req, res, next) {
   try {
     requireSystemAdmin(req);
+    requireNotLoggedInUser(req, req.params.code);
+    await userService.assertUserRoleLevelAllowed(actorCode(req), req.params.code);
     if (typeof req.body?.enabled !== 'boolean') {
       const error = new Error('Request body must include boolean "enabled".');
       error.statusCode = 400; error.code = 'VALIDATION_ERROR'; throw error;
@@ -63,6 +85,7 @@ async function updateSystemActive(req, res, next) {
 async function getUserDetail(req, res, next) {
   try {
     requireSystemAdmin(req);
+    await userService.assertUserRoleLevelAllowed(actorCode(req), req.params.code);
     const data = await userService.getUserDetail(req.params.code);
     if (!data) { const error = new Error(`User ${req.params.code} was not found.`); error.statusCode = 404; error.code = 'RESOURCE_NOT_FOUND'; throw error; }
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -73,6 +96,7 @@ async function getUserDetail(req, res, next) {
 async function getUserPermissions(req, res, next) {
   try {
     requireSystemAdmin(req);
+    await userService.assertUserRoleLevelAllowed(actorCode(req), req.params.code);
     const user = await userService.getUserDetail(req.params.code);
     if (!user) { const error = new Error(`User ${req.params.code} was not found.`); error.statusCode = 404; error.code = 'RESOURCE_NOT_FOUND'; throw error; }
     const permissions = await permissionService.getEffectivePermissions(req.params.code);
@@ -84,6 +108,7 @@ async function getUserPermissions(req, res, next) {
 async function updateUserPermissions(req, res, next) {
   try {
     requireSystemAdmin(req);
+    await userService.assertUserRoleLevelAllowed(actorCode(req), req.params.code);
     const selections = req.body?.permissions;
     if (!validatePermissionSelections(selections)) { const error = new Error('Request body must include a non-empty "permissions" array of { NAME, GRANTED } items.'); error.statusCode = 400; error.code = 'VALIDATION_ERROR'; throw error; }
     const user = await userService.getUserDetail(req.params.code);
@@ -171,6 +196,7 @@ async function updateUserAccess(req, res, next) {
     if (!Array.isArray(roleIds) || !roleIds.length || !roleIds.every((id) => typeof id === 'string' && id.trim())) throw invalid('roleIds must be a non-empty array of role IDs.');
     if (!Array.isArray(permissionIds) || !permissionIds.every((id) => typeof id === 'string' && id.trim())) throw invalid('permissionIds must be an array of permission IDs.');
     if (typeof req.body?.enabled !== 'boolean') throw invalid('enabled must be a boolean.');
+    requireSelfAccountActive(req, req.params.code, req.body.enabled);
     const updatedBy = actorCode(req);
     if (!updatedBy) { const error = new Error('Authenticated user profile is missing an employee code.'); error.statusCode = 403; error.code = 'FORBIDDEN'; throw error; }
     const data = await userService.updateUserAccess(req.params.code, roleIds, permissionIds, req.body.enabled, updatedBy);

@@ -8,7 +8,7 @@ jest.mock('../config/database', () => ({
 
 const { getModels } = require('../models');
 const { getDatabase } = require('../config/database');
-const { updateUserAccess } = require('../services/userService');
+const { assertUserRoleLevelAllowed, updateUserAccess } = require('../services/userService');
 
 describe('userService.updateUserAccess', () => {
   function setup({ existingRoleIds = [], existingPermissionIds = [] } = {}) {
@@ -19,7 +19,13 @@ describe('userService.updateUserAccess', () => {
     const models = {
       User: { findByPk: jest.fn().mockResolvedValue({ ID: 'employee-1' }), update: jest.fn().mockResolvedValue([1]) },
       Employee: { findOne: jest.fn().mockResolvedValue(null) },
-      Role: { findAll: jest.fn().mockResolvedValue([{ ID: 'role-a', ENABLED: '1' }, { ID: 'role-b', ENABLED: '1' }]) },
+      Role: { findAll: jest.fn().mockImplementation(({ where }) => {
+        const roles = [{ ID: 'role-a', ENABLED: '1', LEVEL: 2 }, { ID: 'role-b', ENABLED: '1', LEVEL: 3 }];
+        return Promise.resolve(where?.ID?.[require('sequelize').Op.in]
+          ? roles.filter((role) => where.ID[require('sequelize').Op.in].includes(role.ID))
+          : roles);
+      }) },
+      UserRole: { findAll: jest.fn().mockResolvedValue([{ role: { LEVEL: 3 } }]) },
       RolePermission: { findAll: jest.fn().mockResolvedValue([{ PERMISSION_ID: 'view' }, { PERMISSION_ID: 'delete' }]) },
       Permission: { findAll: jest.fn().mockResolvedValue([{ ID: 'view' }, { ID: 'delete' }]) },
       UserPermission: {
@@ -62,6 +68,25 @@ describe('userService.updateUserAccess', () => {
     models.User.findByPk.mockResolvedValue(null);
 
     await expect(updateUserAccess('missing', ['role-a'], [], true, 'admin-1')).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('rejects assigning a higher-level role than the actor role level', async () => {
+    const { models, query } = setup();
+    models.UserRole.findAll.mockResolvedValue([{ role: { LEVEL: 2 } }]);
+
+    await expect(updateUserAccess('employee-1', ['role-b'], [], true, 'admin-1'))
+      .rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('rejects managing a user who already has a higher-level role', async () => {
+    const { models } = setup();
+    models.UserRole.findAll.mockImplementation(({ where }) => Promise.resolve([
+      { role: { LEVEL: where.USER_ID === 'admin-1' ? 2 : 3 } },
+    ]));
+
+    await expect(assertUserRoleLevelAllowed('admin-1', 'employee-1'))
+      .rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
   });
 
   it('rejects permissions that are not defaults of the assigned roles', async () => {

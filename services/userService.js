@@ -284,6 +284,7 @@ async function listRoleOptions() {
   return roles.map((role) => ({
     ID: String(role.ID),
     NAME: role.NAME,
+    LEVEL: Number(role.LEVEL),
     PERMISSION_IDS: [...new Set(links.filter((link) => String(link.ROLE_ID) === String(role.ID)).map((link) => String(link.PERMISSION_ID)))],
   }));
 }
@@ -324,10 +325,51 @@ async function resolveAccessSelection(roleIds, permissionIds) {
   return { uniqueRoleIds, selectedPermissionIds, activePermissionIds };
 }
 
+async function getActorHighestPrivilegeLevel(actorCode) {
+  const { UserRole, Role } = getModels();
+  const actorRoles = await UserRole.findAll({
+    where: { USER_ID: actorCode, ENABLED: { [Op.in]: ['1', 1, true] } },
+    include: [{ model: Role, as: 'role', attributes: ['LEVEL'], required: true }],
+  });
+  const actorLevels = actorRoles
+    .map((userRole) => Number(userRole.role?.LEVEL))
+    .filter(Number.isFinite);
+  if (!actorLevels.length) throw serviceError('Unable to verify the current user role level.', 403, 'FORBIDDEN');
+  return Math.max(...actorLevels);
+}
+
+async function assertUserRoleLevelAllowed(actorCode, targetCode) {
+  const { UserRole, Role } = getModels();
+  const actorLevel = await getActorHighestPrivilegeLevel(actorCode);
+  const targetRoles = await UserRole.findAll({
+    where: { USER_ID: targetCode, ENABLED: { [Op.in]: ['1', 1, true] } },
+    include: [{ model: Role, as: 'role', attributes: ['LEVEL'], required: true }],
+  });
+  if (targetRoles.some((userRole) => !Number.isFinite(Number(userRole.role?.LEVEL)) || Number(userRole.role.LEVEL) > actorLevel)) {
+    throw serviceError('You cannot manage a user with a higher-level role.', 403, 'FORBIDDEN');
+  }
+}
+
+async function assertRoleAssignmentAllowed(actorCode, roleIds) {
+  const { Role } = getModels();
+  const actorLevel = await getActorHighestPrivilegeLevel(actorCode);
+
+  const uniqueRoleIds = [...new Set(roleIds.map(String))];
+  const selectedRoles = await Role.findAll({
+    where: { ID: { [Op.in]: uniqueRoleIds } },
+    attributes: ['ID', 'LEVEL'],
+  });
+  if (selectedRoles.length !== uniqueRoleIds.length
+      || selectedRoles.some((role) => !Number.isFinite(Number(role.LEVEL)) || Number(role.LEVEL) > actorLevel)) {
+    throw serviceError('You can only assign roles at your level or below.', 403, 'FORBIDDEN');
+  }
+}
+
 async function createUser(employeeCode, roleIds, permissionIds, enabled, actorCode) {
   const { Employee, User, UserPermission } = getModels();
   if (!(await Employee.findByPk(employeeCode))) throw serviceError('The selected employee was not found.', 400, 'VALIDATION_ERROR');
   if (await User.findByPk(employeeCode)) throw serviceError('This employee is already a user.', 409, 'DUPLICATE_USER');
+  await assertRoleAssignmentAllowed(actorCode, roleIds);
   const { uniqueRoleIds, selectedPermissionIds, activePermissionIds } = await resolveAccessSelection(roleIds, permissionIds);
 
   const database = getDatabase();
@@ -363,6 +405,8 @@ async function createUser(employeeCode, roleIds, permissionIds, enabled, actorCo
 async function updateUserAccess(employeeCode, roleIds, permissionIds, enabled, actorCode) {
   const { User, UserPermission } = getModels();
   if (!(await User.findByPk(employeeCode))) throw serviceError(`User ${employeeCode} was not found.`, 404, 'RESOURCE_NOT_FOUND');
+  await assertUserRoleLevelAllowed(actorCode, employeeCode);
+  await assertRoleAssignmentAllowed(actorCode, roleIds);
   const { uniqueRoleIds, selectedPermissionIds, activePermissionIds } = await resolveAccessSelection(roleIds, permissionIds);
 
   const database = getDatabase();
@@ -408,4 +452,4 @@ async function updateUserAccess(employeeCode, roleIds, permissionIds, enabled, a
   });
   return getUserDetail(employeeCode);
 }
-module.exports = { listUsers, getUserDetail, setSystemActive, setViewAs, clearViewAs, listAvailableEmployees, listRoleOptions, listPermissionOptions, createUser, updateUserAccess };
+module.exports = { listUsers, getUserDetail, setSystemActive, setViewAs, clearViewAs, listAvailableEmployees, listRoleOptions, listPermissionOptions, createUser, updateUserAccess, assertUserRoleLevelAllowed };
