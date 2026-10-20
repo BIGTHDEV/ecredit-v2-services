@@ -170,6 +170,11 @@ The Node.js application runs independently on port 3035 (HTTPS). IIS can act as 
 
 If using IIS as a reverse proxy:
 
+The API trusts forwarded client addresses only when the connection comes from
+the local machine. Keep the IIS proxy target on `localhost` so rate limiting
+uses the originating client address without trusting forwarded headers from
+direct clients.
+
 ```xml
 <!-- web.config for IIS -->
 <configuration>

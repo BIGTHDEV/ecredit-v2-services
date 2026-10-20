@@ -32,6 +32,9 @@ const { startEmailReminderScheduler } = require('./services/emailReminderService
 // Create Express application
 const app = express();
 
+// IIS reverse-proxies to localhost; trust only the local proxy when resolving client IPs.
+app.set('trust proxy', 'loopback');
+
 /**
  * Middleware Configuration (in order)
  * 1. Helmet - Security headers
