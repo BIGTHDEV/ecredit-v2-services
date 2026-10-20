@@ -1,6 +1,10 @@
 const cors = require('cors');
 const config = require('../config/env');
 const logger = require('../config/logger');
+const allowedOrigins = new Set([
+  ...config.corsAllowedOrigins,
+  new URL(config.frontendBaseUrl).origin,
+]);
 
 /**
  * CORS Configuration Middleware
@@ -16,23 +20,21 @@ const logger = require('../config/logger');
  * Based on environment-specific allowlist
  */
 const corsOptions = {
-  origin: function (origin, callback) {
-    const allowedOrigins = config.corsAllowedOrigins;
-
+  origin(origin, callback) {
     // Allow requests with no origin (mobile, curl, etc.)
     if (!origin) {
       return callback(null, true);
     }
 
     // Check if origin is in allowlist
-    if (allowedOrigins.includes(origin)) {
+    if (allowedOrigins.has(origin)) {
       return callback(null, true);
     }
 
     // Reject if origin not in allowlist
     logger.warn(`CORS rejected request from origin: ${origin}`, {
       origin,
-      allowedOrigins: allowedOrigins.join(', '),
+      allowedOrigins: [...allowedOrigins].join(', '),
     });
 
     const message = 'Not allowed by CORS policy';

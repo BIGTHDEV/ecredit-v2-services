@@ -243,12 +243,13 @@ D:\web_is\Services\iisnode\ecredit-services\logs\
 
 ### Allowed Origins
 
-Configure via `CORS_ALLOWED_ORIGINS`:
+Configure additional allowed origins via `CORS_ALLOWED_ORIGINS`. The origin
+(scheme and host, without a path) from `FRONTEND_BASE_URL` is also allowed
+automatically, so the deployed frontend and CORS configuration stay aligned.
+For QAS, set `FRONTEND_BASE_URL` to `https://ecredit-qas.bigth.com`.
 
 ```
-Development:  http://localhost:4200,http://localhost:3035
-QAS:          https://serv02.bigth.com,https://serv02.bigth.com:3035
-Production:   https://ecredit.bigth.com,https://api.ecredit.com:3035
+CORS_ALLOWED_ORIGINS=http://localhost:4200,https://localhost:4200
 ```
 
 **DO NOT use wildcard (`*`)** for authenticated endpoints
