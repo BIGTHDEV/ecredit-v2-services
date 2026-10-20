@@ -12,6 +12,8 @@ const approverRoute = require('./approverRoute');
 const emailApprovalRoute = require('./emailApprovalRoute');
 const notificationRoute = require('./notificationRoute');
 const emailReminderRoute = require('./emailReminderRoute');
+const maintenanceRoute = require('./maintenanceRoute');
+const maintenanceGate = require('../middlewares/maintenance');
 
 /**
  * Shared API Route Aggregator
@@ -23,6 +25,8 @@ const emailReminderRoute = require('./emailReminderRoute');
  */
 
 const router = express.Router();
+router.use(maintenanceGate);
+router.use('/maintenance', maintenanceRoute);
 
 // Mount subroutes
 router.use('/home', homeRoute);

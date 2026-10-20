@@ -1,4 +1,5 @@
 /* eslint-env jest */
+jest.mock('../services/maintenanceService', () => ({ getState: jest.fn().mockResolvedValue({ active: false }) }));
 jest.mock('../config/env', () => ({
   environment: 'prd', jwt: { secret: 'reminder-test-secret' }, email: { bcc: 'audit@example.com' },
 }));
@@ -51,6 +52,7 @@ let settings;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  require('../services/maintenanceService').getState.mockResolvedValue({ active: false });
   config.environment = 'prd';
   parameters = {
     environment: 'prd', template: 'request-final', baseSubject: 'Original subject',
@@ -79,6 +81,15 @@ beforeEach(() => {
   sendEmail.mockReset().mockResolvedValue({ messageId: 'message' });
   listApprovalHistory.mockResolvedValue([]);
   listSettings.mockResolvedValue([{ template: 'request-final', enabled: true }]);
+});
+
+test('maintenance pauses the scheduler and individual sends without advancing delivery state', async () => {
+  require('../services/maintenanceService').getState.mockResolvedValue({ active: true });
+  await runEmailReminders();
+  await processReminder(source, 'request-final', undefined, parameters, 'key');
+  expect(listSettings).not.toHaveBeenCalled();
+  expect(database.transaction).not.toHaveBeenCalled();
+  expect(sendEmail).not.toHaveBeenCalled();
 });
 
 describe('reminder eligibility and timing', () => {

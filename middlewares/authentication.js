@@ -2,6 +2,26 @@ const logger = require('../config/logger');
 const tokenValidator = require('../helpers/tokenValidator');
 const errorCodes = require('../helpers/errorCodes');
 const userProfileService = require('../services/userProfileService');
+const authenticated = Symbol('authenticated');
+
+// Maintenance accepts anonymous/invalid tokens, but never hides permission lookup failures.
+async function resolveOptionalIdentity(req, correlationId) {
+  if (req[authenticated]) return req.user;
+  const parts = (req.get('Authorization') || '').split(' ');
+  if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') return null;
+  const validation = tokenValidator.validateToken(parts[1], correlationId);
+  if (!validation.valid) return null;
+  const claims = validation.claims;
+  const email = claims.email || claims.preferred_username || claims.upn || '';
+  const profile = await userProfileService.getUserProfileByEmail(email);
+  if (!profile) return null;
+  req.user = {
+    oid: claims.oid, tid: claims.tid, email, displayName: claims.name,
+    roles: claims.roles || [], profile,
+  };
+  req[authenticated] = true;
+  return req.user;
+}
 
 /**
  * Authentication Middleware
@@ -21,6 +41,7 @@ const userProfileService = require('../services/userProfileService');
  * @param {Function} next - Express next middleware function
  */
 async function authenticationMiddleware(req, res, next) {
+  if (req[authenticated]) return next();
   const correlationId = res.locals.correlationId || 'N/A';
 
   try {
@@ -152,6 +173,7 @@ async function authenticationMiddleware(req, res, next) {
     }
 
     req.user.profile = profile;
+    req[authenticated] = true;
 
     next();
   } catch (error) {
@@ -172,3 +194,4 @@ async function authenticationMiddleware(req, res, next) {
 }
 
 module.exports = authenticationMiddleware;
+module.exports.resolveOptionalIdentity = resolveOptionalIdentity;

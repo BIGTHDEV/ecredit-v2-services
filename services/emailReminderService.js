@@ -11,6 +11,7 @@ const { getRequestEmailModel } = require('./requestEmailModelService');
 const { listApprovalHistory } = require('./requestService');
 const { pendingApprovers, approvalActionsFor } = require('./requestWorkflowNotificationService');
 const { verifyEmailApprovalToken } = require('./emailApprovalActionService');
+const maintenanceService = require('./maintenanceService');
 
 const DRAFT_STATUS_ID = 'db8b3768-8466-4974-8dff-4c374b16a639';
 const WAITING_STATUS_ID = '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b';
@@ -203,6 +204,7 @@ async function previewReminderRequests(template, input) {
 }
 
 async function processReminder(source, template, approvalId, parameters, key) {
+  if ((await maintenanceService.getState()).active) return;
   const database = getDatabase();
   const { EmailReminderConfig, EmailReminderState } = getModels();
   return database.transaction(async (transaction) => {
@@ -275,6 +277,7 @@ async function processReminder(source, template, approvalId, parameters, key) {
 }
 
 async function runEmailReminders(shouldStop = () => false) {
+  if ((await maintenanceService.getState()).active) return;
   const settings = (await listSettings()).filter((setting) => setting.enabled);
   if (!settings.length) return;
   const templates = settings.map((setting) => setting.template);

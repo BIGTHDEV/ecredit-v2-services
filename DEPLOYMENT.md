@@ -25,6 +25,48 @@ send only to the current logged-in tester, with no CC/BCC, including resends and
 View As sessions. If an email action has no logged-in tester context in DEV/QAS,
 the notification is not sent; it never falls back to the audit mailbox.
 
+## Scheduled Maintenance
+
+Before deploying, run
+[`database/migrations/20261020_add_maintenance.sql`](database/migrations/20261020_add_maintenance.sql)
+against **each environment's own database**. This transactional, rerunnable migration
+creates and seeds `MAINTENANCE_CONFIG` disabled without overwriting existing settings.
+There is no automatic schema synchronization or migration at startup. No new environment
+variables are required. DEV/QAS/PRD must use distinct databases to keep their settings independent.
+
+`GET /<env>/api/maintenance` is public and returns
+`{success:true,data:{enabled,active,message,startsAt,endsAt,serverTime,canBypass}}`.
+An optional bearer token resolves `canBypass` from the actual logged-in System Admin
+role, even while inactive; Super User, token role claims, and View As roles do not grant bypass.
+`PUT /<env>/api/maintenance` requires an authenticated actual System Admin and accepts
+`{enabled:boolean,message:string,startsAt:string|null,endsAt:string|null}`.
+Enabled schedules require a nonblank message (maximum 4000 characters) and both timestamps
+with `endsAt > startsAt`. Use ISO timestamps with an explicit timezone; responses are UTC ISO.
+Dates persist as SQL Server `DATETIMEOFFSET(3)`; audit timestamps use `SYSUTCDATETIME()`
+and record the actual logged-in employee, not the viewed employee. Keep server clocks synchronized.
+Both status/configuration responses use `Cache-Control: no-store`.
+
+Maintenance is active exactly when `enabled && startsAt <= serverTime < endsAt`.
+No timer or service restart is needed. During the window all API routes, including CRM
+and public email approval display/confirmation, return HTTP 503 to non-System Admins:
+`{success:false,error:{code:"SYSTEM_MAINTENANCE",message},data:<public-state>,correlationId}`.
+Email approval tokens never grant bypass. The gate runs inside the environment API router,
+after CORS/preflight handling. Only health, maintenance GET/PUT, GET `/auth/me`,
+GET `/permissions/me`, GET `/session/ping`, and POST `/session/presence` are exempt;
+bootstrap endpoints retain their existing authentication. Other permission writes remain gated.
+Missing/malformed settings or identity lookup failures propagate to the standard logged
+error handler, never silently disable maintenance.
+
+Automatic reminders pause at each poll and before starting each delivery during active
+maintenance, without advancing delivery state. Already-started requests/email deliveries
+are not cancelled. Overdue reminders resume after the window using existing cooldown rules.
+
+**Existing authentication limitation:** the shared `helpers/tokenValidator.js` currently
+decodes tokens and checks claims but does not cryptographically verify Entra signatures.
+Maintenance deliberately uses the existing authentication pipeline; production assurance of
+actual identity requires separately hardening that shared validator (or verified upstream
+authentication). Maintenance role checks do not fix that pre-existing authentication issue.
+
 ## Email Reminders
 
 Before deploying this feature, run

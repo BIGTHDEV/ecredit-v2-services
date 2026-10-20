@@ -23,6 +23,7 @@ const defineEmail = require('./email');
 const defineNotification = require('./notification');
 const defineEmailReminderConfig = require('./emailReminderConfig');
 const defineEmailReminderState = require('./emailReminderState');
+const defineMaintenanceConfig = require('./maintenanceConfig');
 
 /**
  * Sequelize model registry
@@ -57,6 +58,7 @@ function initModels(sequelize) {
   const Notification = defineNotification(sequelize);
   const EmailReminderConfig = defineEmailReminderConfig(sequelize);
   const EmailReminderState = defineEmailReminderState(sequelize);
+  const MaintenanceConfig = defineMaintenanceConfig(sequelize);
 
   // TB1 -> TB2 (USERS.ID = S_EMPLOYEE1.EMP_CODE)
   User.hasOne(Employee, { as: 'employee', foreignKey: 'EMP_CODE', sourceKey: 'ID' });
@@ -141,6 +143,7 @@ function initModels(sequelize) {
     Notification,
     EmailReminderConfig,
     EmailReminderState,
+    MaintenanceConfig,
   };
   return models;
 }

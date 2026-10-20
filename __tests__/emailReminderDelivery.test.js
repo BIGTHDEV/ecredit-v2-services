@@ -1,4 +1,5 @@
 /* eslint-env jest */
+jest.mock('../services/maintenanceService', () => ({ getState: jest.fn().mockResolvedValue({ active: false }) }));
 jest.mock('../config/env', () => ({
   environment: 'dev',
   email: { from: 'sender@example.com', bcc: 'default-audit@example.com' },

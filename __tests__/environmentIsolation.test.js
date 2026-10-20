@@ -5,6 +5,7 @@ const request = require('supertest');
 
 jest.mock('../config/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 jest.mock('../models', () => ({ resetModels: jest.fn(), isModelsInitialized: () => false }));
+jest.mock('../services/maintenanceService', () => ({ getState: jest.fn().mockResolvedValue({ active: false }) }));
 jest.mock('sequelize', () => ({
   ...jest.requireActual('sequelize'),
   Sequelize: jest.fn(() => ({ authenticate: jest.fn().mockResolvedValue(), close: jest.fn().mockResolvedValue() })),
