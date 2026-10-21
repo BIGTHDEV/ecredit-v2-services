@@ -93,6 +93,7 @@ function initModels(sequelize) {
   Request.belongsTo(Term, { as: 'proposedTerm', foreignKey: 'PROPOSED_TERM_ID' });
   Request.belongsTo(Term, { as: 'approvedTerm', foreignKey: 'APPROVED_TERM_ID' });
   Request.belongsTo(Status, { as: 'status', foreignKey: 'STATUS_ID' });
+  Request.belongsTo(Status, { as: 'sapStatus', foreignKey: 'STATUS_SAP_ID' });
   Request.belongsTo(Employee, { as: 'requestedByEmployee', foreignKey: 'REQUESTED_BY', targetKey: 'EMP_CODE' });
   Request.belongsTo(Employee, { as: 'updatedByEmployee', foreignKey: 'UPDATED_BY', targetKey: 'EMP_CODE' });
   Request.hasMany(Attachment, { as: 'attachments', foreignKey: 'REQUEST_ID', sourceKey: 'ID' });

@@ -53,6 +53,7 @@ const TEXT_FILTERS = {
 };
 
 const RELATED_TEXT_FILTERS = {
+  SAP_STATUS: ['sapStatus', 'NAME'],
   REQUESTED_RATING: ['requestedRating', 'NAME'],
   REQUESTED_TERM: ['requestedTerm', 'NAME'],
   APPROVED_RATING: ['approvedRating', 'NAME'],
@@ -120,7 +121,8 @@ function buildWhere(query) {
   Object.entries(RELATED_TEXT_FILTERS).forEach(([queryKey, [modelAlias, column]]) => {
     const value = typeof query[queryKey] === 'string' ? query[queryKey].trim() : '';
     if (value) {
-      conditions.push(where(col(`${modelAlias}.${column}`), { [Op.like]: `%${value}%` }));
+      const filterValue = queryKey === 'SAP_STATUS' && value === '-' ? 'Waiting-Approval' : value;
+      conditions.push(where(col(`${modelAlias}.${column}`), { [Op.like]: `%${filterValue}%` }));
     }
   });
 
@@ -193,6 +195,7 @@ function buildIncludes(models) {
     { model: Term, as: 'proposedTerm', required: false },
     { model: Term, as: 'approvedTerm', required: false },
     { model: Status, as: 'status', required: false },
+    { model: Status, as: 'sapStatus', required: false },
     { model: Employee, as: 'requestedByEmployee', required: false },
     { model: Employee, as: 'updatedByEmployee', required: false },
   ];
@@ -354,6 +357,9 @@ function mapRequest(request) {
     IS_TEMPORARY_APPROVED: Boolean(request.IS_TEMPORARY_APPROVED),
     STATUS_ID: request.STATUS_ID || '',
     STATUS: request.status?.NAME || '',
+    STATUS_SAP_ID: request.STATUS_SAP_ID || '',
+    SAP_STATUS: String(request.STATUS_SAP_ID || '').toLowerCase() === WAITING_APPROVAL_STATUS_ID
+      ? '-' : request.sapStatus?.NAME || '',
     REQUESTED_NAME: employeeName(request.requestedByEmployee),
     REQUESTED_BY: request.REQUESTED_BY === null || request.REQUESTED_BY === undefined
       ? null : Number(request.REQUESTED_BY),

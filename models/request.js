@@ -65,6 +65,10 @@ module.exports = (sequelize) =>
       IS_PERMANENT_PROPOSED: DataTypes.BOOLEAN,
       IS_TEMPORARY_PROPOSED: DataTypes.BOOLEAN,
       STATUS_ID: DataTypes.STRING,
+      STATUS_SAP_ID: {
+        type: DataTypes.STRING,
+        defaultValue: '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b',
+      },
       SUBMITTED_BY: DataTypes.INTEGER,
       SUBMITTED_DATE: DataTypes.DATE,
       PROPOSED_DISPLAYED_NOTES: DataTypes.TEXT,
