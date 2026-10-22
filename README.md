@@ -243,11 +243,11 @@ and the previous actioned step shown for decision support).
 
 Recipient policy:
 
-- DEV/QAS send only to the logged-in tester (`req.user.profile.LOGGED_IN_EMAIL`, or
-  `req.user.email`), never the View As user. Both `CC` and `BCC` are empty.
-- DEV/QAS reject delivery if no tester email is available; `EMAIL_BCC` is not a fallback.
+- DEV/QAS send `TO` only to the logged-in tester (`req.user.profile.LOGGED_IN_EMAIL`, or
+  `req.user.email`), never the View As user. `CC` is empty.
+- DEV/QAS reject delivery if no tester email is available; `EMAIL_BCC` is still added as `BCC`.
 - PRD accepts `recipients: { to: string[], cc: string[] }` from the caller.
-- Only PRD adds `EMAIL_BCC`.
+- All environments add `EMAIL_BCC` as `BCC`; resend and reminder deliveries use the current configured value.
 - `request-draft` always greets `Credit Team`. TO is every enabled `USER_ROLES`
   member with role ID `fd08992c-08cc-4c39-8f0d-dfcc0cb90663`, joined to
   `S_EMPLOYEE1` by employee code; CC is the enabled request's `REQUESTED_BY`

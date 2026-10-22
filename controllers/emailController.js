@@ -89,7 +89,6 @@ async function resendRequestEmails(req, res, next) {
           recipients: {},
           actorEmail: req.user?.email,
           effectiveRecipients: recipients,
-          effectiveBcc: sendParameters.bcc,
           requestId: req.params.requestId,
           user: req.user,
           resendOf: emailLog.ID,

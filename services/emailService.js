@@ -164,7 +164,7 @@ async function resolveDraftRecipients(requestId, transaction) {
 }
 
 function createEmailService({ environment = config.environment, bcc = config.email.bcc, transporter } = {}) {
-  async function sendEmail({ template, subject, model, recipients, actorEmail, deliveryEmail, requestId, user, resendOf, effectiveRecipients, effectiveBcc, intendedRecipients, auditActorCode, reminderContext, transaction }) {
+  async function sendEmail({ template, subject, model, recipients, actorEmail, deliveryEmail, requestId, user, resendOf, effectiveRecipients, intendedRecipients, auditActorCode, reminderContext, transaction }) {
     const normalizedEnvironment = String(environment).toLowerCase();
     if (!SUPPORTED_ENVIRONMENTS.has(normalizedEnvironment)) throw new Error('Unsupported email environment.');
     if (missingValue(subject)) throw new Error('subject is required.');
@@ -181,8 +181,8 @@ function createEmailService({ environment = config.environment, bcc = config.ema
     const resolvedRecipients = normalizedEnvironment === 'prd'
       ? (effectiveRecipients || resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail))
       : resolveRecipients(normalizedEnvironment, recipients, resolveActorEmail);
-    const bccRecipients = normalizedEnvironment === 'prd' ? (effectiveBcc || normalizeEmailList(bcc, 'bcc')) : [];
-    if (normalizedEnvironment === 'prd' && !bccRecipients.length) throw new Error('EMAIL_BCC is required.');
+    const bccRecipients = normalizeEmailList(bcc, 'bcc');
+    if (!bccRecipients.length) throw new Error('EMAIL_BCC is required.');
 
     const isReminder = reminderContext?.automatic === true;
     const normalizedModel = { ...normalizeModel(model), isReminder };

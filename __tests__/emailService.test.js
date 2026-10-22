@@ -66,7 +66,7 @@ describe('emailService', () => {
       const sent = transporter.sendMail.mock.calls[0][0];
       expect(sent.to).toEqual(isProduction ? ['credit1@example.com', 'credit2@example.com'] : ['tester@example.com']);
       expect(sent.cc).toEqual(isProduction ? ['requester@example.com'] : []);
-      expect(sent.bcc).toEqual(isProduction ? [mode === 'normal' ? 'audit@example.com' : 'stored-audit@example.com'] : []);
+      expect(sent.bcc).toEqual(['audit@example.com']);
       expect(sent.context.dear).toBe('Credit Team');
       expect(sent.context.isReminder).toBe(mode === 'reminder');
       if (isProduction) {
@@ -162,7 +162,7 @@ describe('emailService', () => {
       subject,
       to: environment === 'prd' ? ['recipient@example.com'] : ['actor@example.com'],
       cc: environment === 'prd' ? ['copy@example.com'] : [],
-      bcc: environment === 'prd' ? ['audit@example.com'] : [],
+      bcc: ['audit@example.com'],
       template: 'request-completed',
     }));
     if (environment !== 'prd') {
@@ -215,7 +215,7 @@ describe('emailService', () => {
     }));
   });
 
-  test.each(['dev', 'qas'])('sends only to Main User in %s even when resend recipients are supplied', async (environment) => {
+  test.each(['dev', 'qas'])('sends only to Main User and configured BCC in %s even when resend recipients are supplied', async (environment) => {
     const transporter = createTransporter();
     await createEmailService({ environment, transporter }).sendEmail({
       template: 'request-completed',
@@ -236,7 +236,7 @@ describe('emailService', () => {
     expect(transporter.sendMail.mock.calls[0][0]).toEqual(expect.objectContaining({
       to: ['main@example.com'],
       cc: [],
-      bcc: [],
+      bcc: ['audit@example.com'],
     }));
   });
 
@@ -292,7 +292,7 @@ describe('emailService', () => {
       actorEmail: 'viewed@example.com',
     });
     expect(transporter.sendMail).toHaveBeenCalledWith(expect.objectContaining({
-      to: ['logged-in@example.com'], cc: [], bcc: [],
+      to: ['logged-in@example.com'], cc: [], bcc: ['audit@example.com'],
     }));
   });
 

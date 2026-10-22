@@ -266,10 +266,10 @@ describe('approval identity', () => {
 describe('reminder delivery and durable state', () => {
   const process = () => processReminder(source, 'request-final', undefined, parameters, reminderKey(source, 'request-final'));
 
-  test('uses the original To/CC/BCC, refreshed content, and records a linked reminder', async () => {
+  test('uses the original To/CC, configured BCC, refreshed content, and records a linked reminder', async () => {
     await process();
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
-      recipients: parameters.recipients, effectiveRecipients: parameters.recipients, effectiveBcc: parameters.bcc,
+      recipients: parameters.recipients, effectiveRecipients: parameters.recipients,
       subject: 'Original subject', model: { companyName: 'Current company' }, resendOf: 'source',
       reminderContext: expect.objectContaining({ automatic: true, sourceEmailId: 'source' }),
       transaction: { id: 'transaction' },
@@ -347,7 +347,7 @@ describe('reminder delivery and durable state', () => {
     parameters.recipients = { to: ['tester@example.com'], cc: [] };
     parameters.bcc = [];
     await process();
-    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ actorEmail: 'tester@example.com', effectiveBcc: [] }));
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ actorEmail: 'tester@example.com' }));
     sendEmail.mockClear();
     parameters.recipients.cc = ['real-copy@example.com'];
     parameters.bcc = ['audit@example.com'];
@@ -356,7 +356,6 @@ describe('reminder delivery and durable state', () => {
       actorEmail: 'tester@example.com',
       recipients: { to: ['tester@example.com'], cc: [] },
       effectiveRecipients: { to: ['tester@example.com'], cc: [] },
-      effectiveBcc: [],
       user: { profile: { CODE: '0', LOGGED_IN_EMAIL: 'tester@example.com' } },
     }));
   });
@@ -459,7 +458,6 @@ describe('reminder delivery and durable state', () => {
     if (allowed) {
       expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
         effectiveRecipients: { to: ['original@example.com'], cc: [] },
-        effectiveBcc: [],
       }));
     }
   });

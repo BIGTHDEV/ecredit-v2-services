@@ -88,7 +88,7 @@ describe('reminder delivery through the real email service and request Email Log
       context: expect.objectContaining({ isReminder: true }),
       to: environment === 'prd' ? ['real-approver@example.com'] : ['tester@example.com'],
       cc: environment === 'prd' ? ['real-copy@example.com'] : [],
-      bcc: environment === 'prd' ? ['stored-audit@example.com'] : [],
+      bcc: ['default-audit@example.com'],
     }));
     expect(models.Email.create).toHaveBeenCalledWith(expect.objectContaining({
       REQUEST_ID: 'original-request', CATEGORY: 'request-approval', CREATED_BY: 0, UPDATED_BY: 0,
@@ -148,7 +148,7 @@ describe('reminder delivery through the real email service and request Email Log
     expect(sent).toMatchObject({
       to: environment === 'prd' ? ['credit1@example.com', 'credit2@example.com'] : ['tester@example.com'],
       cc: environment === 'prd' ? ['requester@example.com'] : [],
-      bcc: environment === 'prd' ? ['stored-audit@example.com'] : [],
+      bcc: ['default-audit@example.com'],
       context: { dear: 'Credit Team', isReminder: true },
     });
     if (environment !== 'prd') {

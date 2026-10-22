@@ -249,7 +249,6 @@ async function processReminder(source, template, approvalId, parameters, key) {
         model,
         recipients,
         effectiveRecipients: recipients,
-        effectiveBcc: isProduction ? parameters.bcc : [],
         actorEmail: testerEmail,
         requestId: source.REQUEST_ID,
         auditActorCode: 0,
