@@ -1,4 +1,4 @@
-const { Op, QueryTypes, fn, col, where } = require('sequelize');
+const { Op, QueryTypes, fn, col, where, literal } = require('sequelize');
 const { randomUUID } = require('crypto');
 const { getModels } = require('../models');
 const { getDatabase } = require('../config/database');
@@ -84,6 +84,26 @@ function nonBlankName(modelAlias) {
   return where(fn('LTRIM', fn('RTRIM', col(`${modelAlias}.NAME`))), { [Op.ne]: '' });
 }
 
+function noteContentExpression() {
+  const emptyMarkup = ['<p>', '</p>', '<div>', '</div>', '<br>', '<br/>', '<br />', '&nbsp;', '&#160;', ' '];
+  let expression = literal("ISNULL(CAST([Request].[BDS_NOTES] AS NVARCHAR(MAX)), '')");
+  emptyMarkup.forEach((markup) => {
+    expression = fn('REPLACE', expression, markup, '');
+  });
+  expression = fn('REPLACE', expression, literal('CHAR(9)'), '');
+  expression = fn('REPLACE', expression, literal('CHAR(10)'), '');
+  expression = fn('REPLACE', expression, literal('CHAR(13)'), '');
+  return fn('LTRIM', fn('RTRIM', expression));
+}
+
+function hasNoteContent(value) {
+  return String(value || '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;|&#160;|&#xA0;/gi, ' ')
+    .replace(/[\s\u00a0\u200b\ufeff]/g, '')
+    .length > 0;
+}
+
 function buildWhere(query) {
   const conditions = [{ ENABLED: true }];
 
@@ -125,6 +145,13 @@ function buildWhere(query) {
       conditions.push(where(col(`${modelAlias}.${column}`), { [Op.like]: `%${filterValue}%` }));
     }
   });
+
+  const takeNotesFilter = typeof query.TAKE_NOTES === 'string' ? query.TAKE_NOTES.trim() : '';
+  if (takeNotesFilter === 'Yes') {
+    conditions.push(where(noteContentExpression(), { [Op.ne]: '' }));
+  } else if (takeNotesFilter === 'No') {
+    conditions.push(where(noteContentExpression(), { [Op.eq]: '' }));
+  }
 
   ['REQUESTED_LIMIT', 'APPROVED_LIMIT'].forEach((queryKey) => {
     const value = typeof query[queryKey] === 'string' ? query[queryKey].trim() : '';
@@ -294,6 +321,7 @@ function mapRequest(request) {
       ? null : toNumber(request.REQUESTED_ADDITIONAL_EXPECTED_AMOUNT),
     REQUESTED_NOTES: request.REQUESTED_NOTES || '',
     BDS_NOTES: request.BDS_NOTES || '',
+    TAKE_NOTES: hasNoteContent(request.BDS_NOTES) ? 'Yes' : 'No',
     CRM_NO: request.CRM_NO || '',
     SUBJECT: request.DESCRIPTION || '',
     PROPOSED_DISPLAYED_NOTES: request.PROPOSED_DISPLAYED_NOTES || '',
@@ -2125,7 +2153,9 @@ async function changeRequestStatus(id, statusId, updatedBy, updateApprovers = fa
     DRAFT_STATUS_ID,
     WAITING_APPROVAL_STATUS_ID,
     FINAL_STATUS_ID,
+    CANCELLED_STATUS_ID,
     COMPLETED_STATUS_ID,
+    REJECTED_STATUS_ID,
   ]);
   if (typeof statusId !== 'string' || !allowedStatuses.has(statusId)) {
     throw validationError('Unsupported request status.');

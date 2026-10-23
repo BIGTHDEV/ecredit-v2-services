@@ -3,6 +3,7 @@ const requestService = require('../services/requestService');
 const companyInfoSuggestionService = require('../services/powerPlatformCompanyInfoService');
 const { getRequestEmailModel } = require('../services/requestEmailModelService');
 const { sendRequestCompletedEmail } = require('../emails/requestCompletedEmail');
+const { syncRequestStatusSafely } = require('../services/salesforceStatusSyncService');
 const { notifyBestEffort } = require('../services/requestWorkflowNotificationService');
 const { isSystemAdminRole } = require('../helpers/roleAuthorization');
 const { effectiveEmployeeCode, approvalAuditEmployeeCode } = require('../helpers/userIdentity');
@@ -330,7 +331,10 @@ async function cancelRequest(req, res, next) {
       user: req.user,
     });
 
-    res.status(200).json({ success: true, data: { id: req.params.id }, correlationId });
+    const crmSync = await syncRequestStatusSafely(req.params.id, '31d531f4-0420-4db5-aecf-bcfe4a0e8c4a', {
+      correlationId, actorCode: updatedBy,
+    });
+    res.status(200).json({ success: true, data: { id: req.params.id }, crmSync, correlationId });
 
     logger.debug('Request cancelled', {
       correlationId,

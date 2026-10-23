@@ -284,8 +284,15 @@ Cross-environment routes return 404.
 
 All environments use the same files directly under `controllers/` and `routes/`.
 `routes/api.js` aggregates the shared API and `routes/index.js` mounts it at the
-active prefix. CRM simulation remains available only in DEV/QAS. There are no
-environment-specific controller or route folders.
+active prefix. No CRM simulation endpoint is exposed. Normal workflows synchronize automatically when a request becomes
+Cancelled, Completed, or Rejected. System Admin Change Status offers an opt-in
+Salesforce checkbox for only those three statuses. OAuth credentials are sent in a
+form-encoded POST body; credit updates use a Bearer token and JSON payload.
+Each Salesforce endpoint attempt is recorded separately in Event Logs without
+storing credentials or access tokens. If Salesforce synchronization fails
+after the eCredit status is committed, the API returns the CRM failure and the
+frontend displays a support modal. There are no environment-specific controller
+or route folders.
 
 ## API Endpoints
 

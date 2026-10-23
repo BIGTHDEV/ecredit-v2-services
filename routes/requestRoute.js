@@ -1,5 +1,4 @@
 const express = require('express');
-const config = require('../config/env');
 const authenticationMiddleware = require('../middlewares/authentication');
 const companyInfoLookupLimiter = require('../middlewares/companyInfoLookupLimiter');
 const requestController = require('../controllers/requestController');
@@ -8,14 +7,9 @@ const eventLogController = require('../controllers/eventLogController');
 const approvalHistoryController = require('../controllers/approvalHistoryController');
 const requestMetadataController = require('../controllers/requestMetadataController');
 const emailController = require('../controllers/emailController');
-const crmSimulationController = require('../controllers/crmSimulationController');
 
 const router = express.Router();
 
-if (!config.isProduction()) {
-  router.get('/simulate-crm-request/identifiers', authenticationMiddleware, crmSimulationController.getSimulationIdentifiers);
-  router.post('/simulate-crm-request', authenticationMiddleware, crmSimulationController.simulateCrmRequest);
-}
 router.get('/', authenticationMiddleware, requestController.listRequests);
 router.get('/statuses', authenticationMiddleware, requestMetadataController.listEnabledStatuses);
 router.get('/log-types', authenticationMiddleware, requestMetadataController.listEnabledLogTypes);

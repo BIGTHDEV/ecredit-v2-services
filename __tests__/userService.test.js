@@ -57,6 +57,31 @@ describe('userService', () => {
     });
   });
 
+  it.each([
+    ['USER', 'Employee'],
+    ['MANAGER_1', 'manager1'],
+    ['MANAGER_2', 'manager2'],
+    ['UPDATED_BY', 'user.updatedByEmployee'],
+  ])('matches INITIALS or USERNAME for %s filters', async (filterKey, association) => {
+    const findAndCountAll = jest.fn().mockResolvedValue({ rows: [], count: 0 });
+    getModels.mockReturnValue({ Employee: { findAndCountAll }, User: {}, CostCenterMapping: {}, UserRole: {}, Role: {} });
+
+    await userService.listUsers({ page: '1', pageSize: '25', [filterKey]: 'NUC' });
+
+    const conditions = findAndCountAll.mock.calls[0][0].where[Op.and];
+    const identityCondition = conditions.find((condition) => condition[Op.or]);
+    expect(identityCondition).toBeDefined();
+    expect(identityCondition[Op.or]).toHaveLength(2);
+    const generatedCondition = require('util').inspect(identityCondition, { depth: null });
+    expect(generatedCondition).toContain('INITIALS');
+    expect(generatedCondition).toContain('USERNAME');
+    expect(generatedCondition).toContain('%NUC%');
+    if (association !== 'Employee') {
+      expect(generatedCondition).toContain(`$${association}.INITIALS$`);
+      expect(generatedCondition).toContain(`$${association}.USERNAME$`);
+    }
+  });
+
   it('filters users by each live presence status before pagination', async () => {
     const findAndCountAll = jest.fn().mockResolvedValue({ rows: [], count: 0 });
     getModels.mockReturnValue({

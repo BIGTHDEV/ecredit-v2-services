@@ -7,9 +7,11 @@ jest.mock('../services/emailApprovalActionService', () => ({
 jest.mock('../services/requestWorkflowNotificationService', () => ({
   notifyBestEffort: jest.fn(),
 }));
+jest.mock('../services/salesforceStatusSyncService', () => ({ syncRequestStatusSafely: jest.fn() }));
 
 const emailApprovalActionService = require('../services/emailApprovalActionService');
 const { notifyBestEffort } = require('../services/requestWorkflowNotificationService');
+const { syncRequestStatusSafely } = require('../services/salesforceStatusSyncService');
 const { confirmAction } = require('../controllers/emailApprovalController');
 
 describe('emailApprovalController.confirmAction', () => {
@@ -24,6 +26,7 @@ describe('emailApprovalController.confirmAction', () => {
       approverName: 'APPROVER',
     });
     notifyBestEffort.mockResolvedValue({});
+    syncRequestStatusSafely.mockResolvedValue(null);
   });
 
   it('uses the token-verified approver identity when no authenticated user is present', async () => {
@@ -99,5 +102,22 @@ describe('emailApprovalController.confirmAction', () => {
     });
     expect(JSON.stringify(actorOptions)).not.toContain('forwarded@example.com');
     expect(JSON.stringify(actorOptions)).not.toContain('9999');
+  });
+
+  it('syncs Salesforce after an email approval rejection', async () => {
+    emailApprovalActionService.confirmEmailApprovalAction.mockResolvedValue({
+      requestId: 'request-1', action: 'reject', isFinalApproval: false,
+      approverId: '1001', approverEmail: 'approver@example.com', approverName: 'APPROVER',
+    });
+    syncRequestStatusSafely.mockResolvedValue({ success: false, message: 'Salesforce unavailable' });
+    const req = { params: { token: 'token' }, body: {} };
+    const res = { locals: { correlationId: 'correlation-1' }, status: jest.fn().mockReturnThis(), json: jest.fn() };
+
+    await confirmAction(req, res, jest.fn());
+
+    expect(syncRequestStatusSafely).toHaveBeenCalledWith('request-1', '94589a22-12e5-4298-aa30-06295acbe1b9', {
+      correlationId: 'correlation-1', actorCode: '1001',
+    });
+    expect(res.json.mock.calls[0][0].crmSync).toMatchObject({ success: false });
   });
 });

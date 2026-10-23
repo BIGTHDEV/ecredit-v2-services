@@ -42,9 +42,6 @@ const envSchema = Joi.object()
     APP_BASE_URL: Joi.string().uri().required(),
     FRONTEND_BASE_URL: Joi.string().uri().required(),
     SALESFORCE_BASE_URL: Joi.string().uri().required(),
-    APP_CREATE_REQUEST_URL: Joi.string().uri().allow('').optional(),
-    HEADER_KEY_CREATE_REQUEST: Joi.string().allow('').optional(),
-    HEADER_VALUE_CREATE_REQUEST: Joi.string().allow('').optional(),
     CORS_ALLOWED_ORIGINS: Joi.string().required(),
     
     // Logging Configuration
@@ -58,6 +55,14 @@ const envSchema = Joi.object()
     EMAIL_SMTP_PASSWORD: Joi.string().required(),
     EMAIL_FROM: Joi.string().email().required(),
     EMAIL_BCC: Joi.string().required(),
+
+    // Salesforce CRM integration
+    CRM_BASE_URL: Joi.string().uri().required(),
+    CRM_GRANT_TYPE: Joi.string().required(),
+    CRM_CLIENT_ID: Joi.string().required(),
+    CRM_CLIENT_SECRET: Joi.string().required(),
+    CRM_USERNAME: Joi.string().required(),
+    CRM_PASSWORD: Joi.string().required(),
 
     // Attachment Storage Configuration
     ATTACHMENT_STORAGE_DIRECTORY: Joi.string().required(),
@@ -172,11 +177,6 @@ module.exports = {
   appBaseUrl: config.APP_BASE_URL,
   frontendBaseUrl: config.FRONTEND_BASE_URL,
   salesforceBaseUrl: config.SALESFORCE_BASE_URL,
-  createRequest: {
-    url: config.APP_CREATE_REQUEST_URL || '',
-    headerKey: config.HEADER_KEY_CREATE_REQUEST || '',
-    headerValue: config.HEADER_VALUE_CREATE_REQUEST || '',
-  },
   corsAllowedOrigins: parseCorsOrigins(config.CORS_ALLOWED_ORIGINS),
   
   // Database
@@ -221,6 +221,15 @@ module.exports = {
     },
     from: config.EMAIL_FROM,
     bcc: config.EMAIL_BCC,
+  },
+
+  crm: {
+    baseUrl: config.CRM_BASE_URL.replace(/\/+$/, ''),
+    grantType: config.CRM_GRANT_TYPE,
+    clientId: config.CRM_CLIENT_ID,
+    clientSecret: config.CRM_CLIENT_SECRET,
+    username: config.CRM_USERNAME,
+    password: config.CRM_PASSWORD,
   },
 
   // Attachments

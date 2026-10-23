@@ -7,6 +7,7 @@ jest.mock('../config/logger', () => ({
 }));
 jest.mock('../services/requestService', () => ({
   getRequestById: jest.fn(),
+  cancelRequest: jest.fn(),
 }));
 jest.mock('../services/powerPlatformCompanyInfoService', () => ({
   suggestCompanyInfo: jest.fn(),
@@ -20,6 +21,7 @@ jest.mock('../emails/requestCompletedEmail', () => ({
 jest.mock('../services/requestWorkflowNotificationService', () => ({
   notifyBestEffort: jest.fn(),
 }));
+jest.mock('../services/salesforceStatusSyncService', () => ({ syncRequestStatusSafely: jest.fn() }));
 jest.mock('../helpers/roleAuthorization', () => ({
   isSystemAdminRole: jest.fn(() => false),
 }));
@@ -31,6 +33,33 @@ jest.mock('../helpers/userIdentity', () => ({
 const requestController = require('./requestController');
 const requestService = require('../services/requestService');
 const companyInfoSuggestionService = require('../services/powerPlatformCompanyInfoService');
+const { syncRequestStatusSafely } = require('../services/salesforceStatusSyncService');
+
+describe('requestController.cancelRequest CRM synchronization', () => {
+  it('syncs the cancelled status after eCredit commits', async () => {
+    requestService.cancelRequest.mockResolvedValue(true);
+    syncRequestStatusSafely.mockResolvedValue({ success: false, message: 'CRM unavailable' });
+    const res = {
+      locals: { correlationId: 'test-correlation-id' },
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+    const next = jest.fn();
+
+    await requestController.cancelRequest({
+      params: { id: 'request-id' },
+      body: { cancelledNotes: 'Duplicate request' },
+      user: { profile: { EFFECTIVE_CODE: '7', EMAIL: 'user@example.com' } },
+    }, res, next);
+
+    expect(syncRequestStatusSafely).toHaveBeenCalledWith(
+      'request-id', '31d531f4-0420-4db5-aecf-bcfe4a0e8c4a',
+      { correlationId: 'test-correlation-id', actorCode: 7 },
+    );
+    expect(res.json.mock.calls[0][0].crmSync).toMatchObject({ success: false });
+    expect(next).not.toHaveBeenCalled();
+  });
+});
 
 describe('requestController.suggestRequestCustomerInfo', () => {
   const next = jest.fn();
@@ -49,6 +78,7 @@ describe('requestController.suggestRequestCustomerInfo', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    syncRequestStatusSafely.mockResolvedValue(null);
     requestService.getRequestById.mockResolvedValue({
       STATUS: 'Draft',
       REQUESTED_BY: 7,

@@ -1,5 +1,6 @@
 const emailApprovalActionService = require('../services/emailApprovalActionService');
 const { notifyBestEffort } = require('../services/requestWorkflowNotificationService');
+const { syncRequestStatusSafely } = require('../services/salesforceStatusSyncService');
 
 async function getAction(req, res, next) {
   try {
@@ -36,6 +37,11 @@ async function confirmAction(req, res, next) {
       deliveryEmail: req.user ? (req.user.profile?.LOGGED_IN_EMAIL || req.user.email) : undefined,
       requireDeliveryEmail: true,
     });
+    const crmSync = data.action === 'reject'
+      ? await syncRequestStatusSafely(data.requestId, '94589a22-12e5-4298-aa30-06295acbe1b9', {
+        correlationId: res.locals.correlationId || 'N/A', actorCode: data.approverId,
+      })
+      : null;
     res.status(200).json({
       success: true,
       data: {
@@ -44,6 +50,7 @@ async function confirmAction(req, res, next) {
         notificationSkipped: Boolean(notification?.skipped),
         notificationSkippedReason: notification?.reason,
       },
+      crmSync,
       correlationId: res.locals.correlationId || 'N/A',
     });
   } catch (error) {

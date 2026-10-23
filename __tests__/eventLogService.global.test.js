@@ -7,7 +7,12 @@ jest.mock('../services/notificationService', () => ({ createSystemAdminErrorNoti
 const { Op } = require('sequelize');
 const { getModels } = require('../models');
 const { createSystemAdminErrorNotifications } = require('../services/notificationService');
-const { getAllEvent, listAllEvents, persistRequestEvent } = require('../services/eventLogService');
+const {
+  getAllEvent,
+  listAllEvents,
+  persistRequestEvent,
+  recordSalesforceEndpointEvent,
+} = require('../services/eventLogService');
 
 describe('global event logs', () => {
   const eventLog = {
@@ -201,5 +206,42 @@ describe('global event logs', () => {
       actorCode: 123,
       message: 'POST request approval-action returned HTTP 500',
     }));
+  });
+
+  it.each([
+    ['crm/create-request', 'POST crm request', 'integration.salesforce.request'],
+    ['oauth2/token', 'POST crm auth', 'integration.salesforce.auth'],
+    ['apexrest/Update_Credit_Rating_Credit_Limit/update_credit_e_credit', 'POST crm update', 'integration.salesforce.update'],
+  ])('uses the short CRM event label for %s', async (endpoint, name, category) => {
+    await recordSalesforceEndpointEvent({
+      requestId: 'request-1',
+      correlationId: 'correlation-1',
+      actorCode: 123,
+      endpoint,
+      success: false,
+      httpStatus: 200,
+      durationMs: 430,
+      message: 'CRM error',
+    });
+
+    expect(Log.create).toHaveBeenCalledWith(expect.objectContaining({
+      NAME: name,
+      CATEGORY: category,
+      REQUEST_ID: 'request-1',
+      LOG_TYPE_ID: '2d8e6e9d-0b7b-427f-a5ba-0e65f61d945b',
+      DESCRIPTION: expect.stringContaining('CRM error'),
+    }));
+  });
+
+  it.each([
+    ['integration.salesforce.request', 'Salesforce create request failed', 'POST crm request'],
+    ['integration.salesforce.auth', 'Salesforce oauth2/token failed', 'POST crm auth'],
+    ['integration.salesforce.update', 'Salesforce Apex endpoint failed', 'POST crm update'],
+  ])('shows the short Salesforce name for existing %s events', async (category, storedName, displayName) => {
+    Log.findOne.mockResolvedValue({ ...eventLog, NAME: storedName, CATEGORY: category });
+
+    const result = await getAllEvent('log-1');
+
+    expect(result.name).toBe(displayName);
   });
 });

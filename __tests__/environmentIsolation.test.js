@@ -33,6 +33,9 @@ test.each(['dev', 'qas', 'prd'])('%s selects its env file, database and shared r
       LOG_LEVEL: 'error', LOG_FORMAT: 'json', EMAIL_SMTP_HOST: 'smtp.example.com', EMAIL_SMTP_PORT: '587',
       EMAIL_SMTP_USER: 'sender@example.com', EMAIL_SMTP_PASSWORD: 'test-only',
       EMAIL_FROM: 'sender@example.com', EMAIL_BCC: 'audit@example.com',
+      CRM_BASE_URL: 'https://crm.example.com/services', CRM_GRANT_TYPE: 'password',
+      CRM_CLIENT_ID: 'test-client-id', CRM_CLIENT_SECRET: 'test-client-secret',
+      CRM_USERNAME: 'crm-user@example.com', CRM_PASSWORD: 'test-crm-password',
       ATTACHMENT_STORAGE_DIRECTORY: 'test-storage', ATTACHMENT_PUBLIC_BASE_URL: 'https://files.example.com',
       ATTACHMENT_MAX_FILE_SIZE: '1000', DEFAULT_ATTACHMENT_TYPE_ID: '11111111-1111-4111-8111-111111111111',
       KEY_PATH: 'test.key', CERT_PATH: 'test.crt', CA_PATH: 'test-ca.crt',
@@ -75,5 +78,5 @@ test.each(['dev', 'qas', 'prd'])('%s selects its env file, database and shared r
     await request(app).get(`/${other}/api/home`).expect(404);
   }
   const requests = require('../routes/requestRoute');
-  expect(requests.stack.some((layer) => layer.route?.path === '/simulate-crm-request')).toBe(environment !== 'prd');
+  expect(requests.stack.some((layer) => layer.route?.path?.includes('simulate-crm-request'))).toBe(false);
 });

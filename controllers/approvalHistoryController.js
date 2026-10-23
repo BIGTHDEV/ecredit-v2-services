@@ -1,5 +1,5 @@
 const requestService = require('../services/requestService');
-const salesforceUpdateSimulationService = require('../services/salesforceUpdateSimulationService');
+const { CRM_STATUS_CODES, syncRequestStatusSafely } = require('../services/salesforceStatusSyncService');
 const { notifyBestEffort } = require('../services/requestWorkflowNotificationService');
 const { isSystemAdminRole } = require('../helpers/roleAuthorization');
 const { effectiveEmployeeCode, approvalAuditEmployeeCode } = require('../helpers/userIdentity');
@@ -48,6 +48,9 @@ async function submitRequest(req, res, next) {
       throw error;
     }
     const request = await requestService.submitRequest(req.params.id, req.body, updatedBy);
+    const crmSync = await syncRequestStatusSafely(req.params.id, request?.STATUS_ID, {
+      correlationId, actorCode: updatedBy,
+    });
     await notifyBestEffort({
       event: String(request?.STATUS_ID || '') === COMPLETED_STATUS_ID ? 'completed' : 'submit',
       requestId: req.params.id,
@@ -56,7 +59,7 @@ async function submitRequest(req, res, next) {
       actorName: req.user?.profile?.FULL_NAME || req.user?.displayName,
       user: req.user,
     });
-    res.status(200).json({ success: true, data: request, correlationId });
+    res.status(200).json({ success: true, data: request, crmSync, correlationId });
   } catch (error) {
     next(error);
   }
@@ -83,6 +86,11 @@ async function processApprovalAction(req, res, next) {
       isSystemAdmin,
       auditActorCode,
     );
+    const crmSync = ['reject', 'finalConfirm', 'finalCancel'].includes(req.body?.action)
+      ? await syncRequestStatusSafely(req.params.id, request?.STATUS_ID, {
+        correlationId, actorCode: auditActorCode,
+      })
+      : null;
     const reachedFinalStatus = String(request?.STATUS_ID || '') === FINAL_STATUS_ID;
     if (['approve', 'reject', 'backward'].includes(req.body?.action)) {
       await notifyBestEffort({
@@ -107,7 +115,7 @@ async function processApprovalAction(req, res, next) {
         auditActorCode,
       });
     }
-    res.status(200).json({ success: true, data: request, correlationId });
+    res.status(200).json({ success: true, data: request, crmSync, correlationId });
   } catch (error) {
     next(error);
   }
@@ -136,9 +144,8 @@ async function changeRequestStatus(req, res, next) {
       statusId,
       updateApprovers = false,
       approveAllApprovers = false,
-      description,
       updateSalesforce = false,
-      crmPayload,
+      description,
     } = req.body ?? {};
     if (typeof description !== 'string' || !description.trim()) {
       const error = new Error('A reason is required to change request status.');
@@ -172,19 +179,12 @@ async function changeRequestStatus(req, res, next) {
       error.code = 'VALIDATION_ERROR';
       throw error;
     }
-    if (updateSalesforce && statusId !== COMPLETED_STATUS_ID) {
-      const error = new Error('Salesforce updates are only available when completing a request.');
+    if (updateSalesforce && !CRM_STATUS_CODES.has(String(statusId || '').toLowerCase())) {
+      const error = new Error('Salesforce updates are only available for Cancelled, Completed, or Rejected statuses.');
       error.statusCode = 400;
       error.code = 'VALIDATION_ERROR';
       throw error;
     }
-    if (updateSalesforce && (!crmPayload || typeof crmPayload !== 'object' || Array.isArray(crmPayload))) {
-      const error = new Error('A request payload is required for the Salesforce simulation.');
-      error.statusCode = 400;
-      error.code = 'VALIDATION_ERROR';
-      throw error;
-    }
-
     const request = await requestService.changeRequestStatus(
       req.params.id,
       statusId,
@@ -199,14 +199,14 @@ async function changeRequestStatus(req, res, next) {
       throw error;
     }
 
-    let crmSimulation = null;
-    if (updateSalesforce) {
-      crmSimulation = await salesforceUpdateSimulationService.simulateRequestUpdate(crmPayload);
-    }
+    const crmSync = updateSalesforce
+      ? await syncRequestStatusSafely(req.params.id, request?.STATUS_ID, { correlationId, actorCode: updatedBy })
+      : null;
 
     res.status(200).json({
       success: true,
-      data: { request, crmSimulation },
+      data: { request },
+      crmSync,
       correlationId,
     });
   } catch (error) {

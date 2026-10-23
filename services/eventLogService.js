@@ -12,6 +12,11 @@ const {
   isMainSystemAdmin,
 } = require('../helpers/userIdentity');
 const MAX_DESCRIPTION_BYTES = 32 * 1024;
+const SALESFORCE_EVENT_NAMES = Object.freeze({
+  'integration.salesforce.request': 'POST crm request',
+  'integration.salesforce.auth': 'POST crm auth',
+  'integration.salesforce.update': 'POST crm update',
+});
 
 function requestIdFromPath(requestPath) {
   const match = String(requestPath || '').match(/\/requests\/([^/?]+)/i);
@@ -52,6 +57,42 @@ function categoryFromPath(requestPath) {
     .replace(/[^a-z0-9._-]/gi, '')
     .replace(/\.+$/, '');
   return `api${actionPath ? `.${actionPath.toLowerCase()}` : ''}`;
+}
+
+async function recordSalesforceEndpointEvent({ requestId, correlationId, actorCode, endpoint, success, httpStatus, durationMs, message }) {
+  const { Log } = getModels();
+  const now = Log.sequelize.literal('GETDATE()');
+  const normalizedActor = Number.isInteger(Number(actorCode)) ? Number(actorCode) : 0;
+  const operation = endpoint === 'oauth2/token'
+    ? 'auth'
+    : String(endpoint).includes('Update_Credit_Rating_Credit_Limit') ? 'update' : 'request';
+  const category = `integration.salesforce.${operation}`;
+  const statusCode = Number.isInteger(httpStatus) ? httpStatus : null;
+  const description = {
+    correlationId: correlationId || 'N/A',
+    integration: 'Salesforce',
+    endpoint,
+    method: 'POST',
+    success: Boolean(success),
+    httpStatus: statusCode,
+    durationMs: Math.max(0, Number(durationMs) || 0),
+    ...(message ? { message: String(message).slice(0, 500) } : {}),
+  };
+
+  return Log.create({
+    ID: uuidv4(),
+    NAME: `POST crm ${operation}`,
+    DESCRIPTION: JSON.stringify(description),
+    LOG_TYPE_ID: LOG_TYPE_IDS[success ? 'success' : 'error'],
+    CATEGORY: category,
+    REQUEST_ID: requestId || null,
+    CREATED_DATE: now,
+    UPDATED_DATE: now,
+    CREATED_BY: normalizedActor,
+    UPDATED_BY: normalizedActor,
+    ENABLED: true,
+    SORTING: 0,
+  });
 }
 
 function uploadedFiles(files) {
@@ -131,7 +172,7 @@ function mapEventLog(log, includeDescription = false) {
 
   return {
     id: record.ID,
-    name: record.NAME,
+    name: SALESFORCE_EVENT_NAMES[record.CATEGORY] || record.NAME,
     category: record.CATEGORY,
     logTypeId: record.LOG_TYPE_ID,
     createdDate: formatThaiDateTime(record.CREATED_DATE),
@@ -487,6 +528,7 @@ module.exports = {
   listAllEvents,
   listRequestEvents,
   persistRequestEvent,
+  recordSalesforceEndpointEvent,
   requestIdFromPath,
   serializeDescription,
   isApprovalOrFinalAction,

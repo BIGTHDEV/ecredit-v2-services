@@ -1,4 +1,4 @@
-const { Op, col, fn, QueryTypes, where } = require('sequelize');
+const { Op, fn, QueryTypes } = require('sequelize');
 const { getDatabase } = require('../config/database');
 const { getModels } = require('../models');
 const {
@@ -27,12 +27,22 @@ function normalizePage(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function employeeIdentityFilter(value, association = '') {
+  const pattern = `%${value.trim()}%`;
+  const initials = association
+    ? { [`$${association}.INITIALS$`]: { [Op.like]: pattern } }
+    : { INITIALS: { [Op.like]: pattern } };
+  const username = association
+    ? { [`$${association}.USERNAME$`]: { [Op.like]: pattern } }
+    : { USERNAME: { [Op.like]: pattern } };
+  return { [Op.or]: [initials, username] };
+}
+
 function buildWhere(query) {
   const filters = [];
   const fields = {
     CODE: 'EMP_CODE',
     NAME: 'NAME_ENG',
-    USER: 'USERNAME',
     EMAIL: 'CURRENT_EMAIL',
   };
 
@@ -42,9 +52,17 @@ function buildWhere(query) {
     }
   }
 
+  const user = query.USER?.trim();
+  if (user) filters.push(employeeIdentityFilter(user));
+
+  for (const [key, association] of [['MANAGER_1', 'manager1'], ['MANAGER_2', 'manager2']]) {
+    const value = query[key]?.trim();
+    if (value) filters.push(employeeIdentityFilter(value, association));
+  }
+
   const updatedBy = query.UPDATED_BY?.trim();
   if (updatedBy) {
-    filters.push(where(fn('CONCAT', col('user.updatedByEmployee.INITIALS'), '-', col('user.updatedByEmployee.USERNAME')), { [Op.like]: `%${updatedBy}%` }));
+    filters.push(employeeIdentityFilter(updatedBy, 'user.updatedByEmployee'));
   }
 
   const updatedDate = query.UPDATED_DATE?.trim();

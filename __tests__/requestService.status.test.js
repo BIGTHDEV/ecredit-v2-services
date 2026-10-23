@@ -13,7 +13,9 @@ const updatedBy = 12345;
 const draftStatusId = 'db8b3768-8466-4974-8dff-4c374b16a639';
 const waitingStatusId = '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b';
 const finalStatusId = '014e8e8b-42cf-4b2f-8cae-e395e26efbcd';
+const cancelledStatusId = '31d531f4-0420-4db5-aecf-bcfe4a0e8c4a';
 const completedStatusId = '407e23f9-caf5-4c4a-801d-598cf437d1ae';
+const rejectedStatusId = '94589a22-12e5-4298-aa30-06295acbe1b9';
 
 describe('requestService.changeRequestStatus', () => {
   let database;
@@ -197,6 +199,17 @@ describe('requestService.changeRequestStatus', () => {
     expect(database.query).toHaveBeenCalledTimes(2);
     expect(database.query.mock.calls[1][0]).toContain('UPDATE REQUESTS');
     expect(database.query.mock.calls[1][0]).not.toContain('APPROVED_LIMIT_AMOUNT');
+    expect(transaction.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([cancelledStatusId, rejectedStatusId])('allows an admin status change to CRM status %s', async (statusId) => {
+    database.query
+      .mockResolvedValueOnce([{ ID: requestId, STATUS_ID: waitingStatusId }])
+      .mockResolvedValueOnce([1]);
+
+    await requestService.changeRequestStatus(requestId, statusId, updatedBy);
+
+    expect(database.query.mock.calls[1][1].replacements.statusId).toBe(statusId);
     expect(transaction.commit).toHaveBeenCalledTimes(1);
   });
 });
