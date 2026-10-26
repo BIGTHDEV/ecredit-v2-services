@@ -170,7 +170,7 @@ async function listApprovers(query = {}) {
 async function listEmployeeOptions(search = '') {
   const { Employee } = getModels();
   const value = typeof search === 'string' ? search.trim() : '';
-  const whereClause = { WORK_STATUS: '3' };
+  const whereClause = {};
   if (value) {
     whereClause[Op.and] = [{
       [Op.or]: [

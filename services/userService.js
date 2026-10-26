@@ -296,7 +296,7 @@ function serviceError(message, statusCode, code) {
 async function listAvailableEmployees(search = '') {
   const value = typeof search === 'string' ? search.trim() : '';
   const { Employee, User } = getModels();
-  const where = { WORK_STATUS: '3', '$user.ID$': { [Op.is]: null } };
+  const where = { '$user.ID$': { [Op.is]: null } };
   if (value) {
     where[Op.or] = ['NAME_ENG', 'EMP_CODE', 'CURRENT_EMAIL', 'INITIALS', 'USERNAME']
       .map((field) => ({ [field]: { [Op.like]: `%${value}%` } }));

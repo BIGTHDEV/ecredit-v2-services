@@ -30,7 +30,7 @@ describe('userService', () => {
       { INITIALS: { [Op.like]: `%${value}%` } },
       { USERNAME: { [Op.like]: `%${value}%` } },
     ]);
-    expect(options.where.WORK_STATUS).toBe('3');
+    expect(options.where.WORK_STATUS).toBeUndefined();
     expect(options.where['$user.ID$']).toEqual({ [Op.is]: null });
     expect(options.include).toEqual([{ model: models.User, as: 'user', required: false, attributes: [] }]);
     expect(options.limit).toBe(100);

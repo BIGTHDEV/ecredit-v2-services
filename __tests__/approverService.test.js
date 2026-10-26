@@ -20,7 +20,7 @@ describe('approverService', () => {
     await approverService.listEmployeeOptions(`  ${value}  `);
 
     const options = findAll.mock.calls[0][0];
-    expect(options.where.WORK_STATUS).toBe('3');
+    expect(options.where.WORK_STATUS).toBeUndefined();
     expect(options.where[Op.and][0][Op.or]).toEqual([
       where(cast(col('EMP_CODE'), 'NVARCHAR'), { [Op.like]: `%${value}%` }),
       { NAME_ENG: { [Op.like]: `%${value}%` } },
@@ -48,7 +48,7 @@ describe('approverService', () => {
       USER: 'EX-example',
       EMAIL: 'example@example.com',
     }]);
-    expect(findAll.mock.calls[0][0].where).toEqual({ WORK_STATUS: '3' });
+    expect(findAll.mock.calls[0][0].where).toEqual({});
   });
 
   it('loads the list with joined employee fields, filters, stable sorting, and pagination through Sequelize', async () => {
