@@ -18,7 +18,7 @@ jest.mock('../services/eventLogService', () => ({ recordSalesforceEndpointEvent:
 
 const { getModels } = require('../models');
 const { recordSalesforceEndpointEvent } = require('../services/eventLogService');
-const { CRM_STATUS_CODES, syncRequestStatus } = require('../services/salesforceStatusSyncService');
+const { CRM_STATUS_CODES, syncRequestStatus, checkReadiness } = require('../services/salesforceStatusSyncService');
 
 describe('salesforceStatusSyncService', () => {
   const request = {
@@ -108,6 +108,32 @@ describe('salesforceStatusSyncService', () => {
   test('does not call Salesforce for unrelated statuses', async () => {
     await expect(syncRequestStatus('request-1', 'draft-status')).resolves.toBeNull();
     expect(global.fetch).not.toHaveBeenCalled();
+    expect(recordSalesforceEndpointEvent).not.toHaveBeenCalled();
+  });
+
+  test('checks readiness using only OAuth without logging, querying requests or returning tokens', async () => {
+    await expect(checkReadiness()).resolves.toEqual({ ready: true });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch.mock.calls[0][0]).toBe('https://crm.example.com/services/oauth2/token');
+    expect(global.fetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+    expect(getModels().Request.findOne).not.toHaveBeenCalled();
+    expect(recordSalesforceEndpointEvent).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { ok: false, status: 401, payload: { error: 'invalid_grant', error_description: 'private CRM details' } },
+    { ok: true, status: 200, payload: {} },
+    { ok: true, status: 200, payload: { access_token: ' ' } },
+  ])('returns only not-ready for rejected or invalid OAuth responses: %j', async ({ ok, status, payload }) => {
+    global.fetch.mockReset().mockResolvedValue({ ok, status, text: async () => JSON.stringify(payload) });
+    await expect(checkReadiness()).resolves.toEqual({ ready: false });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(recordSalesforceEndpointEvent).not.toHaveBeenCalled();
+  });
+
+  test('does not log network failures or timeouts during readiness checks', async () => {
+    global.fetch.mockReset().mockRejectedValue(new Error('Request timed out'));
+    await expect(checkReadiness()).resolves.toEqual({ ready: false });
     expect(recordSalesforceEndpointEvent).not.toHaveBeenCalled();
   });
 });

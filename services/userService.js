@@ -295,16 +295,26 @@ function serviceError(message, statusCode, code) {
 
 async function listAvailableEmployees(search = '') {
   const value = typeof search === 'string' ? search.trim() : '';
-  const rows = await getDatabase().query(
-    `SELECT TOP 100 E.EMP_CODE AS CODE, E.NAME_ENG AS NAME, CONCAT(E.INITIALS, '-', E.USERNAME) AS [USER], E.CURRENT_EMAIL AS EMAIL
-     FROM S_EMPLOYEE1 AS E
-     WHERE E.WORK_STATUS = '3'
-       AND NOT EXISTS (SELECT 1 FROM USERS AS U WHERE U.ID = E.EMP_CODE)
-       AND (:search = '' OR E.EMP_CODE LIKE :pattern OR E.NAME_ENG LIKE :pattern OR E.USERNAME LIKE :pattern OR E.CURRENT_EMAIL LIKE :pattern)
-     ORDER BY E.NAME_ENG ASC, E.EMP_CODE ASC`,
-    { replacements: { search: value, pattern: `%${value}%` }, type: QueryTypes.SELECT },
-  );
-  return rows.map((row) => ({ CODE: String(row.CODE), NAME: row.NAME || '', USER: row.USER || '', EMAIL: (row.EMAIL || '').toLowerCase() }));
+  const { Employee, User } = getModels();
+  const where = { WORK_STATUS: '3', '$user.ID$': { [Op.is]: null } };
+  if (value) {
+    where[Op.or] = ['NAME_ENG', 'EMP_CODE', 'CURRENT_EMAIL', 'INITIALS', 'USERNAME']
+      .map((field) => ({ [field]: { [Op.like]: `%${value}%` } }));
+  }
+  const rows = await Employee.findAll({
+    attributes: ['EMP_CODE', 'NAME_ENG', 'INITIALS', 'USERNAME', 'CURRENT_EMAIL'],
+    include: [{ model: User, as: 'user', required: false, attributes: [] }],
+    where,
+    order: [['NAME_ENG', 'ASC'], ['EMP_CODE', 'ASC']],
+    limit: 100,
+    raw: true,
+  });
+  return rows.map((row) => ({
+    CODE: String(row.EMP_CODE),
+    NAME: row.NAME_ENG || '',
+    USER: `${row.INITIALS || ''}-${row.USERNAME || ''}`,
+    EMAIL: (row.CURRENT_EMAIL || '').toLowerCase(),
+  }));
 }
 
 async function listRoleOptions() {

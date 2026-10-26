@@ -176,6 +176,7 @@ async function listEmployeeOptions(search = '') {
       [Op.or]: [
         where(cast(col('EMP_CODE'), 'NVARCHAR'), { [Op.like]: `%${value}%` }),
         { NAME_ENG: { [Op.like]: `%${value}%` } },
+        { INITIALS: { [Op.like]: `%${value}%` } },
         { USERNAME: { [Op.like]: `%${value}%` } },
         { CURRENT_EMAIL: { [Op.like]: `%${value}%` } },
       ],

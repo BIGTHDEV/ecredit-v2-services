@@ -3,10 +3,54 @@
 jest.mock('../models', () => ({ getModels: jest.fn() }));
 
 const { getModels } = require('../models');
-const { Op } = require('sequelize');
+const { Op, cast, col, where } = require('sequelize');
 const approverService = require('../services/approverService');
 
 describe('approverService', () => {
+  it.each([
+    ['Name', 'Example Employee'],
+    ['Employee Code', '20001234'],
+    ['Email', 'employee@example.com'],
+    ['Initials', 'EX'],
+    ['Username', 'example'],
+  ])('searches all five employee fields for %s input', async (field, value) => {
+    const findAll = jest.fn().mockResolvedValue([]);
+    getModels.mockReturnValue({ Employee: { findAll } });
+
+    await approverService.listEmployeeOptions(`  ${value}  `);
+
+    const options = findAll.mock.calls[0][0];
+    expect(options.where.WORK_STATUS).toBe('3');
+    expect(options.where[Op.and][0][Op.or]).toEqual([
+      where(cast(col('EMP_CODE'), 'NVARCHAR'), { [Op.like]: `%${value}%` }),
+      { NAME_ENG: { [Op.like]: `%${value}%` } },
+      { INITIALS: { [Op.like]: `%${value}%` } },
+      { USERNAME: { [Op.like]: `%${value}%` } },
+      { CURRENT_EMAIL: { [Op.like]: `%${value}%` } },
+    ]);
+    expect(options.limit).toBe(100);
+    expect(options.order).toEqual([['NAME_ENG', 'ASC'], ['EMP_CODE', 'ASC']]);
+  });
+
+  it('preserves employee option fields and skips the search filter for a blank query', async () => {
+    const findAll = jest.fn().mockResolvedValue([{
+      EMP_CODE: 20001234,
+      NAME_ENG: 'Example Employee',
+      INITIALS: 'EX',
+      USERNAME: 'example',
+      CURRENT_EMAIL: 'example@example.com',
+    }]);
+    getModels.mockReturnValue({ Employee: { findAll } });
+
+    await expect(approverService.listEmployeeOptions('   ')).resolves.toEqual([{
+      CODE: '20001234',
+      NAME: 'Example Employee',
+      USER: 'EX-example',
+      EMAIL: 'example@example.com',
+    }]);
+    expect(findAll.mock.calls[0][0].where).toEqual({ WORK_STATUS: '3' });
+  });
+
   it('loads the list with joined employee fields, filters, stable sorting, and pagination through Sequelize', async () => {
     const findAndCountAll = jest.fn().mockResolvedValue({
       count: 1,

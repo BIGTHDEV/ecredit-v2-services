@@ -170,7 +170,8 @@ describe('requestService.processApprovalAction', () => {
       .mockResolvedValueOnce([{ ID: 'approved-type' }])
       .mockResolvedValueOnce([1])
       .mockResolvedValueOnce([1])
-      .mockResolvedValueOnce([{ TOTAL: 0 }]);
+      .mockResolvedValueOnce([{ TOTAL: 0 }])
+      .mockResolvedValueOnce([{ COMMENT: 'BDS Step 2 comment' }]);
 
     await requestService.processApprovalAction(
       requestId,
@@ -192,7 +193,7 @@ describe('requestService.processApprovalAction', () => {
         APPROVED_RATING_ID: 'rating-1',
         APPROVED_VALID_FROM: { fn: 'DATEFROMPARTS' },
         APPROVED_VALID_TO: { fn: 'DATEFROMPARTS' },
-        APPROVED_NOTES: 'Reviewed',
+        APPROVED_NOTES: 'BDS Step 2 comment',
         IS_PERMANENT_APPROVED: false,
         IS_TEMPORARY_APPROVED: true,
       }),
@@ -467,6 +468,22 @@ describe('requestService.processApprovalAction', () => {
 
     expect(error.message).toBe('Final update failed');
     expect(error.rollbackError).toEqual({ message: 'Rollback failed', code: 'EREQUEST' });
+  });
+});
+
+describe('requestService.listApprovalHistory', () => {
+  it('uses the email Opinion for Step 2 BDS Review comments only', async () => {
+    const query = jest.fn().mockResolvedValue([]);
+    getDatabase.mockReturnValue({ query });
+
+    await requestService.listApprovalHistory(requestId);
+
+    const [sql, options] = query.mock.calls[0];
+    expect(sql).toContain("WHEN TB1.APPROVAL_STEP = 2 AND TB2.NAME = 'BDS Review'");
+    expect(sql).toContain('ISNULL(TB8.PROPOSED_DISPLAYED_NOTES, \'-\') COLLATE DATABASE_DEFAULT');
+    expect(sql).not.toContain('ISNULL(TB8.PROPOSED_NOTES, \'-\') COLLATE DATABASE_DEFAULT');
+    expect(sql).toContain('ELSE ISNULL(TB1.DESCRIPTION, \'-\') COLLATE DATABASE_DEFAULT');
+    expect(options.replacements).toEqual({ requestId, includeDisabledApprovals: 0 });
   });
 });
 

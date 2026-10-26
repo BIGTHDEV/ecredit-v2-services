@@ -9,6 +9,56 @@ const userService = require('../services/userService');
 const { recordPresence } = require('../services/sessionPresenceService');
 
 describe('userService', () => {
+  it.each([
+    ['Name', 'Example Employee'],
+    ['Employee Code', '20001234'],
+    ['Email', 'employee@example.com'],
+    ['Initials', 'EX'],
+    ['Username', 'example'],
+  ])('searches all five available employee fields for %s input', async (field, value) => {
+    const findAll = jest.fn().mockResolvedValue([]);
+    const models = { Employee: { findAll }, User: {} };
+    getModels.mockReturnValue(models);
+
+    await userService.listAvailableEmployees(`  ${value}  `);
+
+    const options = findAll.mock.calls[0][0];
+    expect(options.where[Op.or]).toEqual([
+      { NAME_ENG: { [Op.like]: `%${value}%` } },
+      { EMP_CODE: { [Op.like]: `%${value}%` } },
+      { CURRENT_EMAIL: { [Op.like]: `%${value}%` } },
+      { INITIALS: { [Op.like]: `%${value}%` } },
+      { USERNAME: { [Op.like]: `%${value}%` } },
+    ]);
+    expect(options.where.WORK_STATUS).toBe('3');
+    expect(options.where['$user.ID$']).toEqual({ [Op.is]: null });
+    expect(options.include).toEqual([{ model: models.User, as: 'user', required: false, attributes: [] }]);
+    expect(options.limit).toBe(100);
+    expect(options.order).toEqual([['NAME_ENG', 'ASC'], ['EMP_CODE', 'ASC']]);
+  });
+
+  it('does not apply a search filter for a blank employee search', async () => {
+    const findAll = jest.fn().mockResolvedValue([]);
+    getModels.mockReturnValue({ Employee: { findAll }, User: {} });
+
+    await userService.listAvailableEmployees('   ');
+
+    expect(findAll.mock.calls[0][0].where[Op.or]).toBeUndefined();
+  });
+
+  it('preserves the available employee response shape and normalizes missing fields', async () => {
+    const findAll = jest.fn().mockResolvedValue([
+      { EMP_CODE: 20001234, NAME_ENG: 'Example Employee', INITIALS: 'EX', USERNAME: 'example', CURRENT_EMAIL: 'EXAMPLE@Example.com' },
+      { EMP_CODE: 20001235, NAME_ENG: null, INITIALS: null, USERNAME: null, CURRENT_EMAIL: null },
+    ]);
+    getModels.mockReturnValue({ Employee: { findAll }, User: {} });
+
+    await expect(userService.listAvailableEmployees()).resolves.toEqual([
+      { CODE: '20001234', NAME: 'Example Employee', USER: 'EX-example', EMAIL: 'example@example.com' },
+      { CODE: '20001235', NAME: '', USER: '-', EMAIL: '' },
+    ]);
+  });
+
   it('returns audit fields and includes their employee relation in the user list', async () => {
     const employee = {
       EMP_CODE: 123,

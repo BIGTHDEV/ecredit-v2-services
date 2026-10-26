@@ -24,6 +24,7 @@ function messageFrom(payload, fallback, secrets = []) {
 }
 
 async function logEndpoint(context, endpoint, result) {
+  if (context === null) return;
   try {
     await recordSalesforceEndpointEvent({ ...context, endpoint, ...result });
   } catch (error) {
@@ -88,6 +89,29 @@ async function postEndpoint(endpoint, body, headers, context, validateResponse, 
   }
 }
 
+async function authenticate(context) {
+  return postEndpoint('oauth2/token', {
+    grant_type: config.crm.grantType,
+    client_id: config.crm.clientId,
+    client_secret: config.crm.clientSecret,
+    username: config.crm.username,
+    password: config.crm.password,
+  }, { 'content-type': 'application/x-www-form-urlencoded' }, context,
+  (payload) => typeof payload?.access_token === 'string' && payload.access_token.trim()
+    ? null : messageFrom(payload, 'Salesforce OAuth response did not contain an access token.', Object.values(config.crm)),
+  (body) => new URLSearchParams(body).toString(),
+  Object.values(config.crm));
+}
+
+async function checkReadiness() {
+  try {
+    await authenticate(null);
+    return { ready: true };
+  } catch {
+    return { ready: false };
+  }
+}
+
 async function syncRequestStatus(requestId, statusId, context = {}) {
   const statusCode = CRM_STATUS_CODES.get(String(statusId || '').toLowerCase());
   if (!statusCode) return null;
@@ -115,17 +139,7 @@ async function syncRequestStatus(requestId, statusId, context = {}) {
     throw new Error(message);
   }
 
-  const tokenResponse = await postEndpoint('oauth2/token', {
-    grant_type: config.crm.grantType,
-    client_id: config.crm.clientId,
-    client_secret: config.crm.clientSecret,
-    username: config.crm.username,
-    password: config.crm.password,
-  }, { 'content-type': 'application/x-www-form-urlencoded' }, eventContext,
-  (payload) => typeof payload?.access_token === 'string' && payload.access_token
-    ? null : messageFrom(payload, 'Salesforce OAuth response did not contain an access token.', Object.values(config.crm)),
-  (body) => new URLSearchParams(body).toString(),
-  Object.values(config.crm));
+  const tokenResponse = await authenticate(eventContext);
 
   await postEndpoint(UPDATE_ENDPOINT, {
     credit: {
@@ -160,4 +174,4 @@ async function syncRequestStatusSafely(requestId, statusId, context = {}) {
   }
 }
 
-module.exports = { CRM_STATUS_CODES, syncRequestStatus, syncRequestStatusSafely };
+module.exports = { CRM_STATUS_CODES, syncRequestStatus, syncRequestStatusSafely, checkReadiness };

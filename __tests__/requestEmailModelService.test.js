@@ -77,7 +77,8 @@ describe('requestEmailModelService', () => {
       IS_CASH_DEPOSIT_PROPOSED: false,
       PROPOSED_BANK_GUARANTEE_AMOUNT: '1000',
       PROPOSED_CASH_DEPOSIT_AMOUNT: '2000',
-      PROPOSED_NOTES: 'Approved',
+      PROPOSED_DISPLAYED_NOTES: '123',
+      PROPOSED_NOTES: '456',
       existingTerm: { NAME: '30 days' },
       requestedTerm: { NAME: '60 days' },
       proposedTerm: { NAME: '45 days' },
@@ -115,6 +116,7 @@ describe('requestEmailModelService', () => {
       bankGuarantee: true,
       cashDeposit: false,
       showAdditionalConditions: true,
+      opinion: '123',
       creditLimitExisting: '10,000.00',
       creditLimitRequested: '20,000.00',
       creditLimitProposed: '15,000.00',
@@ -136,6 +138,15 @@ describe('requestEmailModelService', () => {
 
     expect(model.showScoringClassification).toBe(false);
     expect(model.showAdditionalConditions).toBe(false);
+  });
+
+  test('uses the displayed Opinion instead of Description in email models', () => {
+    const model = mapRequestToEmailModel({
+      PROPOSED_DISPLAYED_NOTES: '123',
+      PROPOSED_NOTES: '456',
+    });
+
+    expect(model.opinion).toBe('123');
   });
 
   test('maps movement history in order and shares display steps for parallel approvals', () => {

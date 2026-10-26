@@ -1,5 +1,6 @@
 const logger = require('../config/logger');
 const { persistRequestEvent } = require('../services/eventLogService');
+const config = require('../config/env');
 
 /**
  * Request Logger Middleware
@@ -18,6 +19,9 @@ const { persistRequestEvent } = require('../services/eventLogService');
  * @param {Function} next - Express next middleware function
  */
 function requestLoggerMiddleware(req, res, next) {
+  if (req.method === 'POST' && req.path === `/${config.environment}/api/health/crm`) {
+    return next();
+  }
   const correlationId = res.locals.correlationId || 'N/A';
   const startTime = Date.now();
   const method = req.method;

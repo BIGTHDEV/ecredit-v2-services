@@ -407,104 +407,30 @@
                                 <th>Existing</th>
                                 <th>New Proposed by BAE</th>
                                 <th>Suggested By Credit Team</th>
+                                <th>Final Confirmed</th>
                             </tr>
                             <tr>
                                 <td>Credit Term</td>
                                 <td>{{creditTermExisting}}</td>
                                 <td>{{creditTermProposed}}</td>
-                                <td>{{approvedCreditDetails.creditTerm}}</td>
+                                <td>{{suggestedCreditDetails.creditTerm}}</td>
+                                <td>{{finalConfirmedDetails.creditTerm}}</td>
                             </tr>
                             <tr>
                                 <td>Credit Limit (THB)</td>
                                 <td>{{creditLimitExisting}}</td>
                                 <td>{{creditLimitProposed}}</td>
-                                <td>{{approvedCreditDetails.creditLimit}}</td>
+                                <td>{{suggestedCreditDetails.creditLimit}}</td>
+                                <td>{{finalConfirmedDetails.creditLimit}}</td>
                             </tr>
                             <tr>
                                 <td>Credit Rating</td>
                                 <td>{{creditRatingExisting}}</td>
                                 <td>-</td>
-                                <td>{{approvedCreditDetails.creditRating}}</td>
+                                <td>{{suggestedCreditDetails.creditRating}}</td>
+                                <td>{{finalConfirmedDetails.creditRating}}</td>
                             </tr>
                         </table>
-
-                        <p class="section-title">Credit Rating Scoring</p>
-                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                            style="border: 1px solid #d6e6da;">
-                            <tr>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #fafdfb; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Profitability</span><br>
-                                    <span
-                                        style="color: #009a49; font-size: 22px; font-weight: bold; line-height: 1.6;">{{profitability}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #fafdfb; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Growth</span><br>
-                                    <span
-                                        style="color: #009a49; font-size: 22px; font-weight: bold; line-height: 1.6;">{{growth}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #fafdfb; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Liquidity</span><br>
-                                    <span
-                                        style="color: #009a49; font-size: 22px; font-weight: bold; line-height: 1.6;">{{liquidity}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; background-color: #fafdfb; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Leverage</span><br>
-                                    <span
-                                        style="color: #009a49; font-size: 22px; font-weight: bold; line-height: 1.6;">{{leverage}}</span>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #edf7f1; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Existing</span><br>
-                                    <span
-                                        style="color: #e67e22; font-size: 22px; font-weight: bold; line-height: 1.6;">{{existingProfitability}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #edf7f1; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Existing</span><br>
-                                    <span
-                                        style="color: #e67e22; font-size: 22px; font-weight: bold; line-height: 1.6;">{{existingGrowth}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #edf7f1; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Existing</span><br>
-                                    <span
-                                        style="color: #e67e22; font-size: 22px; font-weight: bold; line-height: 1.6;">{{existingLiquidity}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; background-color: #edf7f1; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Existing</span><br>
-                                    <span
-                                        style="color: #e67e22; font-size: 22px; font-weight: bold; line-height: 1.6;">{{existingLeverage}}</span>
-                                </td>
-                            </tr>
-                        </table>
-
-                        {{#if showScoringClassification}}
-                        <p class="section-title">Special Rating Score Conditions</p>
-                        <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                            <tr>
-                                <td class="label">Condition</td>
-                                <td class="value">
-                                    {{#if scoringClassificationNa}}N/A{{/if}}
-                                    {{#if scoringClassificationGovernment}}{{#if
-                                    scoringClassificationNa}}<br>{{/if}}Government Hospital &amp; Institution &amp;
-                                    Education{{/if}}
-                                    {{#if scoringClassificationOthers}}{{#if scoringClassificationNa}}<br>{{/if}}{{#if
-                                    scoringClassificationGovernment}}<br>{{/if}}Others{{/if}}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td class="label">Comment</td>
-                                <td class="value">{{{scoringNotes}}}</td>
-                            </tr>
-                        </table>
-                        {{/if}}
 
                         <p class="section-title">Final Confirmed Credit Details</p>
                         <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
@@ -513,30 +439,16 @@
                                 <td class="value">{{{finalConfirmedDetails.comment}}}</td>
                             </tr>
                             <tr>
-                                <td class="label">Credit Limit</td>
-                                <td class="value">{{finalConfirmedDetails.creditLimit}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Credit Term</td>
-                                <td class="value">{{finalConfirmedDetails.creditTerm}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Credit Rating</td>
-                                <td class="value">{{finalConfirmedDetails.creditRating}}</td>
-                            </tr>
-                            <tr>
                                 <td class="label">Clear outstanding balance</td>
                                 <td class="value">{{#if finalConfirmedDetails.clearOutstandingBalanceYes}}<span
                                         class="status-yes">&#10003;</span>{{else}}<span
-                                        class="status-no">&#10007;</span>{{/if}}
-                                </td>
+                                        class="status-no">&#10007;</span>{{/if}}</td>
                             </tr>
                             <tr>
                                 <td class="label">Limit credit used to not exceed approved</td>
                                 <td class="value">{{#if finalConfirmedDetails.withinApprovedLimitYes}}<span
                                         class="status-yes">&#10003;</span>{{else}}<span
-                                        class="status-no">&#10007;</span>{{/if}}
-                                </td>
+                                        class="status-no">&#10007;</span>{{/if}}</td>
                             </tr>
                             <tr>
                                 <td class="label">Bank guarantee</td>
@@ -548,17 +460,15 @@
                             </tr>
                             <tr>
                                 <td class="label">Temporary Adjustment</td>
-                                <td class="value">{{#if
-                                    finalConfirmedDetails.temporaryYes}}{{finalConfirmedDetails.validFrom}} -
+                                <td class="value">{{#if finalConfirmedDetails.temporaryYes}}{{finalConfirmedDetails.validFrom}} -
                                     {{finalConfirmedDetails.validTo}}{{else}}-{{/if}}</td>
                             </tr>
                             <tr>
                                 <td class="label">Permanent Adjustment</td>
-                                <td class="value">{{#if
-                                    finalConfirmedDetails.permanentYes}}{{finalConfirmedDetails.validFrom}}{{else}}-{{/if}}
-                                </td>
+                                <td class="value">{{#if finalConfirmedDetails.permanentYes}}{{finalConfirmedDetails.validFrom}}{{else}}-{{/if}}</td>
                             </tr>
                         </table>
+
                         <p style="margin: 26px 0 4px;">You can access to this request by following
                             <a href="{{link}}" target="_blank" style="color: #009a49; font-weight: bold;">
                                 Link

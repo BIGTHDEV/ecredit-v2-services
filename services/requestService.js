@@ -572,7 +572,7 @@ async function listApprovalHistory(requestId, { includeDisabledApprovals = false
 
       SELECT
         CAST(TB1.ID AS VARCHAR(36)) COLLATE DATABASE_DEFAULT AS ID,
-        ISNULL(TB1.PROPOSED_NOTES, '-') COLLATE DATABASE_DEFAULT AS COMMENT,
+        ISNULL(TB1.PROPOSED_DISPLAYED_NOTES, '-') COLLATE DATABASE_DEFAULT AS COMMENT,
         TB1.PROPOSED_LIMIT_AMOUNT AS CREDIT_LIMIT,
         ISNULL(TB4.NAME, '') COLLATE DATABASE_DEFAULT AS CREDIT_TERM,
         ISNULL(TB5.NAME, '') COLLATE DATABASE_DEFAULT AS CREDIT_RATING,
@@ -611,7 +611,11 @@ async function listApprovalHistory(requestId, { includeDisabledApprovals = false
 
       SELECT
         CAST(TB1.ID AS VARCHAR(36)) COLLATE DATABASE_DEFAULT AS ID,
-        ISNULL(TB1.DESCRIPTION, '-') COLLATE DATABASE_DEFAULT AS COMMENT,
+        CASE
+          WHEN TB1.APPROVAL_STEP = 2 AND TB2.NAME = 'BDS Review'
+            THEN ISNULL(TB8.PROPOSED_DISPLAYED_NOTES, '-') COLLATE DATABASE_DEFAULT
+          ELSE ISNULL(TB1.DESCRIPTION, '-') COLLATE DATABASE_DEFAULT
+        END AS COMMENT,
         TB1.LIMIT_AMOUNT AS CREDIT_LIMIT,
         ISNULL(TB6.NAME, '') COLLATE DATABASE_DEFAULT AS CREDIT_TERM,
         ISNULL(TB7.NAME, '') COLLATE DATABASE_DEFAULT AS CREDIT_RATING,
@@ -1966,6 +1970,14 @@ async function processApprovalAction(id, action, payload, updatedBy, isSystemAdm
       );
       if (Number(pendingCount?.TOTAL) === 0) {
         isFinalApproval = true;
+        const bdsReviewCommentRows = await database.query(
+          `SELECT ISNULL(PROPOSED_DISPLAYED_NOTES, '') AS COMMENT
+           FROM REQUESTS
+           WHERE CONVERT(VARCHAR(36), ID) COLLATE DATABASE_DEFAULT
+               = CONVERT(VARCHAR(36), :id) COLLATE DATABASE_DEFAULT
+             AND ENABLED = '1'`,
+          { replacements: { id }, type: QueryTypes.SELECT, transaction },
+        );
         await Request.update(
           {
             STATUS_ID: FINAL_STATUS_ID,
@@ -1980,7 +1992,7 @@ async function processApprovalAction(id, action, payload, updatedBy, isSystemAdm
             APPROVED_VALID_TO: normalizedUpdate.VALID_TO
               ? databaseDateFromYmd(Request.sequelize, normalizedUpdate.VALID_TO)
               : null,
-            APPROVED_NOTES: normalizedUpdate.DESCRIPTION,
+            APPROVED_NOTES: bdsReviewCommentRows[0]?.COMMENT || '',
             IS_PERMANENT_APPROVED: normalizedUpdate.IS_PERMANENT,
             IS_TEMPORARY_APPROVED: normalizedUpdate.IS_TEMPORARY,
             UPDATED_BY: auditBy,
