@@ -251,7 +251,7 @@ function salesGroupName(code) {
     300: '300 - PG',
   };
 
-  return salesGroups[code] || 'OTHERS';
+  return salesGroups[code] || '999 - Others';
 }
 
 function formatUpdatedDate(value) {
