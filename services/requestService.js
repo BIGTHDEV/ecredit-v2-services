@@ -1305,8 +1305,7 @@ function deriveScoringRating(scores) {
   if (total <= 30) return SCORING_RATING_IDS.D;
   if (total <= 50) return SCORING_RATING_IDS.C;
   if (total <= 70) return SCORING_RATING_IDS.B;
-  if (total <= 90) return SCORING_RATING_IDS.A;
-  throw validationError('The total scoring value must not exceed 90.');
+  return SCORING_RATING_IDS.A;
 }
 
 function normalizeRequestScoringAndPayment(payload) {
