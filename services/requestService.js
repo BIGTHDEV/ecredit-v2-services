@@ -1435,9 +1435,14 @@ function normalizeRequestRequestedDetails(payload) {
     'REQUESTED_SELLING_TYPE', 'REQUESTED_DELIVERY_FREQUENCY', 'REQUESTED_NOTES', 'BDS_NOTES']
     .forEach((field) => {
       if (!Object.prototype.hasOwnProperty.call(update, field)) return;
-      if (update[field] === null) update[field] = '';
+      if ((field === 'REQUESTED_TERM_ID' || field === 'REQUESTED_RATING_ID')
+        && (update[field] === null || update[field] === '')) {
+        update[field] = null;
+      } else if (update[field] === null) {
+        update[field] = '';
+      }
       const maximumLength = field === 'REQUESTED_DELIVERY_FREQUENCY' ? 50 : field === 'BDS_NOTES' ? MAX_RICH_TEXT_SIZE : 2048;
-      if (typeof update[field] !== 'string' || update[field].length > maximumLength) {
+      if (update[field] !== null && (typeof update[field] !== 'string' || update[field].length > maximumLength)) {
         throw validationError(`${field} must be a string no longer than ${maximumLength} characters.`);
       }
       if (field === 'BDS_NOTES' && Buffer.byteLength(update[field], 'utf8') > MAX_RICH_TEXT_SIZE) {
@@ -1625,9 +1630,24 @@ function normalizeApprovalUpdate(payload) {
   return update;
 }
 
+async function validateApprovalReferences(update, { Term, Rating }, transaction) {
+  if (update.TERM_ID) {
+    const term = await Term.findByPk(update.TERM_ID, { transaction });
+    if (!term) throw validationError('TERM_ID must reference a valid term.');
+  }
+  if (update.RATING_ID) {
+    const rating = await Rating.findOne({
+      where: { ID: update.RATING_ID, ENABLED: '1' },
+      transaction,
+    });
+    if (!rating) throw validationError('RATING_ID must reference an enabled rating.');
+  }
+}
+
 async function saveFinalApproval(id, payload, updatedBy, isSystemAdmin = false, auditBy = updatedBy) {
   const normalizedUpdate = normalizeApprovalUpdate(payload);
-  const { Request } = getModels();
+  const models = getModels();
+  const { Request } = models;
   const database = getDatabase();
   const transaction = await database.transaction();
   try {
@@ -1680,6 +1700,8 @@ async function saveFinalApproval(id, payload, updatedBy, isSystemAdmin = false, 
       throw error;
     }
 
+    await validateApprovalReferences(normalizedUpdate, models, transaction);
+
     await Request.update(
       {
         APPROVED_LIMIT_AMOUNT: normalizedUpdate.LIMIT_AMOUNT,
@@ -1719,7 +1741,8 @@ async function processApprovalAction(id, action, payload, updatedBy, isSystemAdm
   }
   const normalizedUpdate = action === 'backward' ? null : normalizeApprovalUpdate(payload);
 
-  const { Approval, Request } = getModels();
+  const models = getModels();
+  const { Approval, Request } = models;
   const database = getDatabase();
   const transaction = await database.transaction();
   let isFinalApproval = false;
@@ -1804,6 +1827,8 @@ async function processApprovalAction(id, action, payload, updatedBy, isSystemAdm
       error.code = 'FORBIDDEN';
       throw error;
     }
+
+    if (normalizedUpdate) await validateApprovalReferences(normalizedUpdate, models, transaction);
 
     if (action === 'backward') {
       await Approval.update(
@@ -2035,7 +2060,8 @@ async function processFinalAction(id, action, payload, updatedBy, isSystemAdmin 
   }
 
   const normalizedUpdate = action === 'finalConfirm' ? normalizeApprovalUpdate(payload) : null;
-  const { Request } = getModels();
+  const models = getModels();
+  const { Request } = models;
   const database = getDatabase();
   const transaction = await database.transaction();
   try {
@@ -2087,6 +2113,8 @@ async function processFinalAction(id, action, payload, updatedBy, isSystemAdmin 
       error.code = 'FORBIDDEN';
       throw error;
     }
+
+    if (normalizedUpdate) await validateApprovalReferences(normalizedUpdate, models, transaction);
 
     const update = {
       STATUS_ID: action === 'finalConfirm' ? COMPLETED_STATUS_ID : CANCELLED_STATUS_ID,

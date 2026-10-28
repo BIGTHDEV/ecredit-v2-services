@@ -64,6 +64,8 @@ describe('requestService.processApprovalAction', () => {
   let database;
   let transaction;
   let sequelize;
+  let Rating;
+  let Term;
 
   beforeEach(() => {
     transaction = {
@@ -79,13 +81,15 @@ describe('requestService.processApprovalAction', () => {
     };
     approvalUpdate = jest.fn().mockResolvedValue([1]);
     requestUpdate = jest.fn().mockResolvedValue([1]);
+    Rating = { findOne: jest.fn().mockResolvedValue({ ID: 'rating-1' }) };
+    Term = { findByPk: jest.fn().mockResolvedValue({ ID: 'term-1' }) };
 
     getDatabase.mockReturnValue(database);
     getModels.mockReturnValue({
       Approval: { update: approvalUpdate, sequelize },
       Request: { findOne: jest.fn().mockResolvedValue(null), update: requestUpdate, sequelize },
-      Rating: {},
-      Term: {},
+      Rating,
+      Term,
       Status: {},
       Employee: {},
     });
@@ -141,6 +145,36 @@ describe('requestService.processApprovalAction', () => {
     );
     expect(transaction.commit).toHaveBeenCalledTimes(1);
     expect(transaction.rollback).not.toHaveBeenCalled();
+  });
+
+  it('rejects approval rating IDs that do not exist', async () => {
+    database.query.mockResolvedValueOnce([{ ID: approvalId }]);
+    Rating.findOne.mockResolvedValueOnce(null);
+
+    await expect(requestService.processApprovalAction(
+      requestId,
+      'save',
+      approvalPayload(),
+      updatedBy,
+    )).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
+
+    expect(approvalUpdate).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects approval term IDs that do not exist', async () => {
+    database.query.mockResolvedValueOnce([{ ID: approvalId }]);
+    Term.findByPk.mockResolvedValueOnce(null);
+
+    await expect(requestService.processApprovalAction(
+      requestId,
+      'save',
+      approvalPayload(),
+      updatedBy,
+    )).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
+
+    expect(approvalUpdate).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalledTimes(1);
   });
 
   it('checks approval as the effective user while stamping the separate audit user', async () => {
@@ -625,6 +659,23 @@ describe('requestService.submitRequest', () => {
     expect(transaction.commit).toHaveBeenCalledTimes(1);
     expect(Customer.findOne).not.toHaveBeenCalled();
     expect(Customer.create).not.toHaveBeenCalled();
+  });
+
+  it('stores blank requested term and rating IDs as null when submitting', async () => {
+    const command = submitCommand([]);
+    command.requestedDetails.REQUESTED_TERM_ID = '';
+    command.requestedDetails.REQUESTED_RATING_ID = '';
+
+    await requestService.submitRequest(requestId, command, updatedBy);
+
+    expect(requestRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({ REQUESTED_RATING_ID: null }),
+      { transaction },
+    );
+    expect(requestRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({ REQUESTED_TERM_ID: null }),
+      { transaction },
+    );
   });
 
   it('creates an enabled customer from request data when submitting with a 13-digit tax number', async () => {
