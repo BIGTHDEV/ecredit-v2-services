@@ -107,6 +107,40 @@ function hasNoteContent(value) {
 function buildWhere(query) {
   const conditions = [{ ENABLED: true }];
 
+  ['CREDIT_ADJUSTMENT', 'EFFECTIVE_DATE', 'EXPIRY_DATE'].forEach((queryKey) => {
+    const value = typeof query[queryKey] === 'string' ? query[queryKey].trim() : '';
+    if (!value) return;
+
+    const alternatives = [];
+    [false, true].forEach((completed) => {
+      const phase = completed ? 'APPROVED' : 'PROPOSED';
+      const status = { STATUS_ID: { [completed ? Op.eq : Op.ne]: COMPLETED_STATUS_ID } };
+      const temporary = fn('COALESCE', col(`Request.IS_TEMPORARY_${phase}`), 0);
+      const permanent = fn('COALESCE', col(`Request.IS_PERMANENT_${phase}`), 0);
+      ['Temporary', 'Permanent', '-'].forEach((adjustment) => {
+        const branch = [status, where(temporary, adjustment === 'Temporary' ? 1 : 0)];
+        if (adjustment !== 'Temporary') {
+          branch.push(where(permanent, adjustment === 'Permanent' ? 1 : 0));
+        }
+
+        const showsDate = queryKey === 'EFFECTIVE_DATE'
+          ? adjustment === 'Temporary' || (completed && adjustment === 'Permanent')
+          : queryKey === 'EXPIRY_DATE' && adjustment === 'Temporary';
+        if (showsDate) {
+          const dateColumn = `${phase}_VALID_${queryKey === 'EFFECTIVE_DATE' ? 'FROM' : 'TO'}`;
+          branch.push(where(fn('COALESCE', fn('FORMAT', col(`Request.${dateColumn}`), 'dd/MM/yyyy'), '-'), {
+            [Op.like]: `%${value}%`,
+          }));
+        } else {
+          const displayedValue = queryKey === 'CREDIT_ADJUSTMENT' ? adjustment : '-';
+          if (!displayedValue.toLowerCase().includes(value.toLowerCase())) return;
+        }
+        alternatives.push({ [Op.and]: branch });
+      });
+    });
+    conditions.push(alternatives.length ? { [Op.or]: alternatives } : { ID: null });
+  });
+
   const relatedCustomerNo = typeof query.relatedCustomerNo === 'string' ? query.relatedCustomerNo.trim() : '';
   const relatedTaxId = typeof query.relatedTaxId === 'string' ? query.relatedTaxId.trim() : '';
   const relatedCustomerConditions = [];

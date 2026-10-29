@@ -9,6 +9,41 @@ const { Op } = require('sequelize');
 const requestService = require('../services/requestService');
 
 describe('requestService.listRequests sorting', () => {
+  it.each(['Temporary', 'Permanent', 'temp', '-'])('filters displayed credit adjustment by %s', async (value) => {
+    const findAndCountAll = jest.fn().mockResolvedValue({ rows: [], count: 0 });
+    getModels.mockReturnValue({ Request: { findAndCountAll }, Rating: {}, Term: {}, Status: {}, Employee: {} });
+
+    await requestService.listRequests({ CREDIT_ADJUSTMENT: value });
+
+    const alternatives = findAndCountAll.mock.calls[0][0].where[Op.and][1][Op.or];
+    expect(alternatives).toHaveLength(2);
+    alternatives.forEach((alternative, index) => {
+      const branch = alternative[Op.and];
+      expect(branch[0]).toEqual({
+        STATUS_ID: { [index === 0 ? Op.ne : Op.eq]: '407e23f9-caf5-4c4a-801d-598cf437d1ae' },
+      });
+      expect(branch[1].logic).toBe(['Temporary', 'temp'].includes(value) ? 1 : 0);
+      expect(JSON.stringify(branch[1].attribute)).toContain(index === 0 ? 'PROPOSED' : 'APPROVED');
+    });
+  });
+
+  it.each(['EFFECTIVE_DATE', 'EXPIRY_DATE'])('filters %s using displayed dates and applicable adjustment types', async (key) => {
+    const findAndCountAll = jest.fn().mockResolvedValue({ rows: [], count: 0 });
+    getModels.mockReturnValue({ Request: { findAndCountAll }, Rating: {}, Term: {}, Status: {}, Employee: {} });
+
+    await requestService.listRequests({ [key]: '03/10/2026' });
+
+    const alternatives = findAndCountAll.mock.calls[0][0].where[Op.and][1][Op.or];
+    expect(alternatives).toHaveLength(key === 'EFFECTIVE_DATE' ? 3 : 2);
+    alternatives.forEach((alternative) => {
+      const branch = alternative[Op.and];
+      const dateCondition = branch[branch.length - 1];
+      expect(dateCondition.logic).toEqual({ [Op.like]: '%03/10/2026%' });
+      expect(JSON.stringify(dateCondition.attribute)).toContain('dd/MM/yyyy');
+      expect(JSON.stringify(dateCondition.attribute)).toContain(key === 'EFFECTIVE_DATE' ? 'VALID_FROM' : 'VALID_TO');
+    });
+  });
+
   it('orders by CREATED_DATE descending by default', async () => {
     const findAndCountAll = jest.fn().mockResolvedValue({ rows: [], count: 0 });
     getModels.mockReturnValue({
