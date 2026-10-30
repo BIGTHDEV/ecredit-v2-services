@@ -418,12 +418,50 @@ describe('requestService.processApprovalAction', () => {
         APPROVED_NOTES: 'Final approved note',
         IS_PERMANENT_APPROVED: false,
         IS_TEMPORARY_APPROVED: true,
+        IS_CLEAR_OUTSTANDING_BALANCE_APPROVED: true,
+        IS_WITHIN_APPROVED_LIMIT_APPROVED: false,
+        IS_BANK_GUARANTEE_APPROVED: false,
+        APPROVED_BANK_GUARANTEE_AMOUNT: 0,
+        IS_CASH_DEPOSIT_APPROVED: true,
+        APPROVED_CASH_DEPOSIT_AMOUNT: 1200,
       }),
       expect.objectContaining({ transaction }),
     );
     expect(database.query).toHaveBeenCalledTimes(2);
     expect(database.query.mock.calls[1][0]).toContain('SELECT TOP 1');
     expect(database.query.mock.calls[1][0]).not.toContain('UPDATE APPROVALS');
+    expect(transaction.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves Final Review condition values to the request snapshot without changing approval history', async () => {
+    database.query.mockResolvedValueOnce([{ ID: requestId }]);
+
+    await requestService.saveFinalApproval(
+      requestId,
+      {
+        ...approvalPayload('save'),
+        IS_CLEAR_OUTSTANDING_BALANCE: false,
+        IS_WITHIN_APPROVED_LIMIT: true,
+        IS_BANK_GUARANTEE: false,
+        BANK_GUARANTEE_AMOUNT: 0,
+        IS_CASH_DEPOSIT: true,
+        CASH_DEPOSIT_AMOUNT: 1200,
+      },
+      updatedBy,
+    );
+
+    expect(requestUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        IS_CLEAR_OUTSTANDING_BALANCE_APPROVED: false,
+        IS_WITHIN_APPROVED_LIMIT_APPROVED: true,
+        IS_BANK_GUARANTEE_APPROVED: false,
+        APPROVED_BANK_GUARANTEE_AMOUNT: 0,
+        IS_CASH_DEPOSIT_APPROVED: true,
+        APPROVED_CASH_DEPOSIT_AMOUNT: 1200,
+      }),
+      expect.objectContaining({ transaction }),
+    );
+    expect(approvalUpdate).not.toHaveBeenCalled();
     expect(transaction.commit).toHaveBeenCalledTimes(1);
   });
 

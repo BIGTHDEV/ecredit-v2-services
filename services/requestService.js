@@ -417,6 +417,18 @@ function mapRequest(request) {
     APPROVED_NOTES: request.APPROVED_NOTES || '',
     IS_PERMANENT_APPROVED: Boolean(request.IS_PERMANENT_APPROVED),
     IS_TEMPORARY_APPROVED: Boolean(request.IS_TEMPORARY_APPROVED),
+    IS_CLEAR_OUTSTANDING_BALANCE_APPROVED: request.IS_CLEAR_OUTSTANDING_BALANCE_APPROVED == null
+      ? null : Boolean(request.IS_CLEAR_OUTSTANDING_BALANCE_APPROVED),
+    IS_WITHIN_APPROVED_LIMIT_APPROVED: request.IS_WITHIN_APPROVED_LIMIT_APPROVED == null
+      ? null : Boolean(request.IS_WITHIN_APPROVED_LIMIT_APPROVED),
+    IS_BANK_GUARANTEE_APPROVED: request.IS_BANK_GUARANTEE_APPROVED == null
+      ? null : Boolean(request.IS_BANK_GUARANTEE_APPROVED),
+    APPROVED_BANK_GUARANTEE_AMOUNT: request.APPROVED_BANK_GUARANTEE_AMOUNT == null
+      ? null : toNumber(request.APPROVED_BANK_GUARANTEE_AMOUNT),
+    IS_CASH_DEPOSIT_APPROVED: request.IS_CASH_DEPOSIT_APPROVED == null
+      ? null : Boolean(request.IS_CASH_DEPOSIT_APPROVED),
+    APPROVED_CASH_DEPOSIT_AMOUNT: request.APPROVED_CASH_DEPOSIT_AMOUNT == null
+      ? null : toNumber(request.APPROVED_CASH_DEPOSIT_AMOUNT),
     STATUS_ID: request.STATUS_ID || '',
     STATUS: request.status?.NAME || '',
     STATUS_SAP_ID: request.STATUS_SAP_ID || '',
@@ -1664,6 +1676,17 @@ function normalizeApprovalUpdate(payload) {
   return update;
 }
 
+function finalApprovedConditionFields(update) {
+  return {
+    IS_CLEAR_OUTSTANDING_BALANCE_APPROVED: update.IS_CLEAR_OUTSTANDING_BALANCE,
+    IS_WITHIN_APPROVED_LIMIT_APPROVED: update.IS_WITHIN_APPROVED_LIMIT,
+    IS_BANK_GUARANTEE_APPROVED: update.IS_BANK_GUARANTEE,
+    APPROVED_BANK_GUARANTEE_AMOUNT: update.BANK_GUARANTEE_AMOUNT,
+    IS_CASH_DEPOSIT_APPROVED: update.IS_CASH_DEPOSIT,
+    APPROVED_CASH_DEPOSIT_AMOUNT: update.CASH_DEPOSIT_AMOUNT,
+  };
+}
+
 async function validateApprovalReferences(update, { Term, Rating }, transaction) {
   if (update.TERM_ID) {
     const term = await Term.findByPk(update.TERM_ID, { transaction });
@@ -1750,6 +1773,7 @@ async function saveFinalApproval(id, payload, updatedBy, isSystemAdmin = false, 
         APPROVED_NOTES: normalizedUpdate.DESCRIPTION,
         IS_PERMANENT_APPROVED: normalizedUpdate.IS_PERMANENT,
         IS_TEMPORARY_APPROVED: normalizedUpdate.IS_TEMPORARY,
+        ...finalApprovedConditionFields(normalizedUpdate),
         UPDATED_BY: auditBy,
         UPDATED_DATE: Request.sequelize.fn('GETDATE'),
       },
@@ -2194,6 +2218,7 @@ async function processFinalAction(id, action, payload, updatedBy, isSystemAdmin 
         APPROVED_NOTES: normalizedUpdate.DESCRIPTION,
         IS_PERMANENT_APPROVED: normalizedUpdate.IS_PERMANENT,
         IS_TEMPORARY_APPROVED: normalizedUpdate.IS_TEMPORARY,
+        ...finalApprovedConditionFields(normalizedUpdate),
       });
     } else {
       Object.assign(update, {

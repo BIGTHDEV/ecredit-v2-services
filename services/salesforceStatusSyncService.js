@@ -23,6 +23,10 @@ function messageFrom(payload, fallback, secrets = []) {
   return message ? redactSecrets(message.trim(), secrets) : fallback;
 }
 
+function isApproved(value) {
+  return value === true || value === 1 || value === '1';
+}
+
 async function logEndpoint(context, endpoint, result) {
   if (context === null) return;
   try {
@@ -122,7 +126,12 @@ async function syncRequestStatus(requestId, statusId, context = {}) {
 
   const request = await getModels().Request.findOne({
     where: { ID: requestId, ENABLED: true },
-    attributes: ['CRM_ID', 'APPROVED_LIMIT_AMOUNT', 'APPROVED_TERM_ID', 'APPROVED_RATING_ID', 'IS_TERM_APPROVED', 'IS_LIMIT_APPROVED'],
+    attributes: [
+      'CRM_ID', 'APPROVED_LIMIT_AMOUNT', 'APPROVED_TERM_ID', 'APPROVED_RATING_ID', 'IS_TERM_APPROVED', 'IS_LIMIT_APPROVED',
+      'APPROVED_BANK_GUARANTEE_AMOUNT', 'APPROVED_CASH_DEPOSIT_AMOUNT',
+      'IS_CLEAR_OUTSTANDING_BALANCE_APPROVED', 'IS_WITHIN_APPROVED_LIMIT_APPROVED',
+      'IS_BANK_GUARANTEE_APPROVED', 'IS_CASH_DEPOSIT_APPROVED',
+    ],
   });
   if (!request) throw new Error(`Request ${requestId} was not found after its status changed.`);
   if (!String(request.CRM_ID || '').trim()) {
@@ -143,6 +152,19 @@ async function syncRequestStatus(requestId, statusId, context = {}) {
     await logEndpoint(eventContext, UPDATE_ENDPOINT, { success: false, httpStatus: null, durationMs: 0, message });
     throw new Error(message);
   }
+  const bankGuaranteeApproved = isApproved(request.IS_BANK_GUARANTEE_APPROVED);
+  const cashDepositApproved = isApproved(request.IS_CASH_DEPOSIT_APPROVED);
+  const bankGuaranteeAmount = bankGuaranteeApproved
+    ? (request.APPROVED_BANK_GUARANTEE_AMOUNT == null ? 0 : Number(request.APPROVED_BANK_GUARANTEE_AMOUNT))
+    : 0;
+  const cashDepositAmount = cashDepositApproved
+    ? (request.APPROVED_CASH_DEPOSIT_AMOUNT == null ? 0 : Number(request.APPROVED_CASH_DEPOSIT_AMOUNT))
+    : 0;
+  if (!Number.isFinite(bankGuaranteeAmount) || !Number.isFinite(cashDepositAmount)) {
+    const message = 'Approved guarantee or cash deposit amount is invalid for the Salesforce update.';
+    await logEndpoint(eventContext, UPDATE_ENDPOINT, { success: false, httpStatus: null, durationMs: 0, message });
+    throw new Error(message);
+  }
 
   const tokenResponse = await authenticate(eventContext);
 
@@ -153,6 +175,11 @@ async function syncRequestStatus(requestId, statusId, context = {}) {
       credit_limit: approvedLimit,
       terms: !request.IS_TERM_APPROVED || request.APPROVED_TERM_ID == null ? '' : String(request.APPROVED_TERM_ID),
       rating: request.APPROVED_RATING_ID == null ? '' : String(request.APPROVED_RATING_ID),
+      out_standing_balance: isApproved(request.IS_CLEAR_OUTSTANDING_BALANCE_APPROVED),
+      limit_credit_used_to_not_exceed_approve: isApproved(request.IS_WITHIN_APPROVED_LIMIT_APPROVED),
+      bank_guarantee: bankGuaranteeApproved,
+      bank_guarantee_amount: bankGuaranteeAmount,
+      cash_deposit: cashDepositAmount,
     },
   }, {
     authorization: `Bearer ${tokenResponse.access_token}`,

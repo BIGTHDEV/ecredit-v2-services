@@ -69,6 +69,11 @@ describe('salesforceStatusSyncService', () => {
       credit_limit: 0,
       terms: '',
       rating: 'rating-id',
+      out_standing_balance: false,
+      limit_credit_used_to_not_exceed_approve: false,
+      bank_guarantee: false,
+      bank_guarantee_amount: 0,
+      cash_deposit: 0,
     });
     expect(recordSalesforceEndpointEvent).toHaveBeenNthCalledWith(1, expect.objectContaining({
       ...eventContext,
@@ -86,6 +91,39 @@ describe('salesforceStatusSyncService', () => {
     expect(JSON.stringify(recordSalesforceEndpointEvent.mock.calls)).not.toContain('token-secret');
     expect(JSON.stringify(recordSalesforceEndpointEvent.mock.calls)).not.toContain('client-secret-test');
     expect(JSON.stringify(recordSalesforceEndpointEvent.mock.calls)).not.toContain('signature');
+  });
+
+  test('sends approved conditions and only includes amounts for enabled options', async () => {
+    getModels().Request.findOne.mockResolvedValue({
+      ...request,
+      IS_CLEAR_OUTSTANDING_BALANCE_APPROVED: true,
+      IS_WITHIN_APPROVED_LIMIT_APPROVED: false,
+      IS_BANK_GUARANTEE_APPROVED: true,
+      APPROVED_BANK_GUARANTEE_AMOUNT: '1250.50',
+      IS_CASH_DEPOSIT_APPROVED: false,
+      APPROVED_CASH_DEPOSIT_AMOUNT: '900',
+    });
+
+    await syncRequestStatus('request-1', '407e23f9-caf5-4c4a-801d-598cf437d1ae');
+
+    expect(getModels().Request.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      attributes: expect.arrayContaining([
+        'APPROVED_BANK_GUARANTEE_AMOUNT',
+        'APPROVED_CASH_DEPOSIT_AMOUNT',
+        'IS_CLEAR_OUTSTANDING_BALANCE_APPROVED',
+        'IS_WITHIN_APPROVED_LIMIT_APPROVED',
+        'IS_BANK_GUARANTEE_APPROVED',
+        'IS_CASH_DEPOSIT_APPROVED',
+      ]),
+    }));
+    const body = JSON.parse(global.fetch.mock.calls[1][1].body);
+    expect(body.credit).toEqual(expect.objectContaining({
+      out_standing_balance: true,
+      limit_credit_used_to_not_exceed_approve: false,
+      bank_guarantee: true,
+      bank_guarantee_amount: 1250.5,
+      cash_deposit: 0,
+    }));
   });
 
   test.each([
@@ -116,6 +154,11 @@ describe('salesforceStatusSyncService', () => {
       credit_limit: creditLimit,
       terms,
       rating: 'rating-id',
+      out_standing_balance: false,
+      limit_credit_used_to_not_exceed_approve: false,
+      bank_guarantee: false,
+      bank_guarantee_amount: 0,
+      cash_deposit: 0,
     });
     expect(recordSalesforceEndpointEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({ requestBody: body }));
   });
