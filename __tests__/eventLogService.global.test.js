@@ -233,6 +233,43 @@ describe('global event logs', () => {
     }));
   });
 
+  it.each([true, false])('persists the CRM update body with null and empty values when success is %s', async (success) => {
+    const requestBody = {
+      credit: {
+        credit_id: 'a0IBK000006TloN2AS',
+        credit_status: '100000003',
+        credit_limit: null,
+        terms: '',
+        rating: '',
+      },
+    };
+
+    await recordSalesforceEndpointEvent({
+      requestId: 'request-1',
+      endpoint: 'apexrest/Update_Credit_Rating_Credit_Limit/update_credit_e_credit',
+      success,
+      httpStatus: success ? 200 : 500,
+      durationMs: 10,
+      requestBody,
+    });
+
+    expect(JSON.parse(Log.create.mock.calls[0][0].DESCRIPTION).request.body).toEqual(requestBody);
+  });
+
+  it('does not persist OAuth credentials even if a request body is supplied', async () => {
+    await recordSalesforceEndpointEvent({
+      endpoint: 'oauth2/token',
+      success: true,
+      httpStatus: 200,
+      requestBody: { client_secret: 'private-secret', password: 'private-password' },
+    });
+
+    const description = Log.create.mock.calls[0][0].DESCRIPTION;
+    expect(JSON.parse(description)).not.toHaveProperty('request');
+    expect(description).not.toContain('private-secret');
+    expect(description).not.toContain('private-password');
+  });
+
   it.each([
     ['integration.salesforce.request', 'Salesforce create request failed', 'POST crm request'],
     ['integration.salesforce.auth', 'Salesforce oauth2/token failed', 'POST crm auth'],

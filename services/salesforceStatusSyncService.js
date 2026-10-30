@@ -46,6 +46,7 @@ function responseSummary(endpoint, payload, secrets) {
 async function postEndpoint(endpoint, body, headers, context, validateResponse, encodeBody, secrets = []) {
   const startedAt = Date.now();
   const url = `${config.crm.baseUrl}/${endpoint}`;
+  const requestDetails = endpoint === UPDATE_ENDPOINT ? { requestBody: body } : {};
   let httpStatus = null;
   try {
     const response = await fetch(url, {
@@ -67,6 +68,7 @@ async function postEndpoint(endpoint, body, headers, context, validateResponse, 
       ? messageFrom(payload, `Salesforce returned HTTP ${response.status}.`, secrets)
       : validateResponse(payload) || '', secrets) || null;
     await logEndpoint(context, endpoint, {
+      ...requestDetails,
       success: !responseError,
       httpStatus,
       durationMs: Date.now() - startedAt,
@@ -79,6 +81,7 @@ async function postEndpoint(endpoint, body, headers, context, validateResponse, 
     const safeMessage = redactSecrets(error.message || 'Salesforce request failed.', secrets);
     if (httpStatus === null) {
       await logEndpoint(context, endpoint, {
+        ...requestDetails,
         success: false,
         httpStatus: null,
         durationMs: Date.now() - startedAt,
@@ -119,7 +122,7 @@ async function syncRequestStatus(requestId, statusId, context = {}) {
 
   const request = await getModels().Request.findOne({
     where: { ID: requestId, ENABLED: true },
-    attributes: ['CRM_ID', 'APPROVED_LIMIT_AMOUNT', 'APPROVED_TERM_ID', 'APPROVED_RATING_ID'],
+    attributes: ['CRM_ID', 'APPROVED_LIMIT_AMOUNT', 'APPROVED_TERM_ID', 'APPROVED_RATING_ID', 'IS_TERM_APPROVED', 'IS_LIMIT_APPROVED'],
   });
   if (!request) throw new Error(`Request ${requestId} was not found after its status changed.`);
   if (!String(request.CRM_ID || '').trim()) {
@@ -132,8 +135,10 @@ async function syncRequestStatus(requestId, statusId, context = {}) {
     });
     throw new Error(message);
   }
-  const approvedLimit = request.APPROVED_LIMIT_AMOUNT == null ? 0 : Number(request.APPROVED_LIMIT_AMOUNT);
-  if (!Number.isFinite(approvedLimit)) {
+  const approvedLimit = request.IS_LIMIT_APPROVED
+    ? (request.APPROVED_LIMIT_AMOUNT == null ? 0 : Number(request.APPROVED_LIMIT_AMOUNT))
+    : null;
+  if (approvedLimit !== null && !Number.isFinite(approvedLimit)) {
     const message = 'Approved credit limit is invalid for the Salesforce update.';
     await logEndpoint(eventContext, UPDATE_ENDPOINT, { success: false, httpStatus: null, durationMs: 0, message });
     throw new Error(message);
@@ -146,7 +151,7 @@ async function syncRequestStatus(requestId, statusId, context = {}) {
       credit_id: request.CRM_ID,
       credit_status: statusCode,
       credit_limit: approvedLimit,
-      terms: request.APPROVED_TERM_ID == null ? '' : String(request.APPROVED_TERM_ID),
+      terms: !request.IS_TERM_APPROVED || request.APPROVED_TERM_ID == null ? '' : String(request.APPROVED_TERM_ID),
       rating: request.APPROVED_RATING_ID == null ? '' : String(request.APPROVED_RATING_ID),
     },
   }, {

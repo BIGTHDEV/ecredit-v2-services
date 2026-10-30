@@ -59,7 +59,7 @@ function categoryFromPath(requestPath) {
   return `api${actionPath ? `.${actionPath.toLowerCase()}` : ''}`;
 }
 
-async function recordSalesforceEndpointEvent({ requestId, correlationId, actorCode, endpoint, success, httpStatus, durationMs, message }) {
+async function recordSalesforceEndpointEvent({ requestId, correlationId, actorCode, endpoint, success, httpStatus, durationMs, message, requestBody }) {
   const { Log } = getModels();
   const now = Log.sequelize.literal('GETDATE()');
   const normalizedActor = Number.isInteger(Number(actorCode)) ? Number(actorCode) : 0;
@@ -76,6 +76,7 @@ async function recordSalesforceEndpointEvent({ requestId, correlationId, actorCo
     success: Boolean(success),
     httpStatus: statusCode,
     durationMs: Math.max(0, Number(durationMs) || 0),
+    ...(operation === 'update' && requestBody !== undefined ? { request: { body: requestBody } } : {}),
     ...(message ? { message: String(message).slice(0, 500) } : {}),
   };
 

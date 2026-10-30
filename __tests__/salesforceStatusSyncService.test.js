@@ -23,6 +23,8 @@ const { CRM_STATUS_CODES, syncRequestStatus, checkReadiness } = require('../serv
 describe('salesforceStatusSyncService', () => {
   const request = {
     CRM_ID: 'crm-credit-id',
+    IS_TERM_APPROVED: true,
+    IS_LIMIT_APPROVED: true,
     APPROVED_LIMIT_AMOUNT: null,
     APPROVED_TERM_ID: null,
     APPROVED_RATING_ID: 'rating-id',
@@ -78,10 +80,65 @@ describe('salesforceStatusSyncService', () => {
       ...eventContext,
       requestId: 'request-1',
       endpoint: expect.stringContaining('apexrest/'), success: true, httpStatus: 200,
+      requestBody: JSON.parse(updateOptions.body),
     }));
+    expect(recordSalesforceEndpointEvent.mock.calls[0][0]).not.toHaveProperty('requestBody');
     expect(JSON.stringify(recordSalesforceEndpointEvent.mock.calls)).not.toContain('token-secret');
     expect(JSON.stringify(recordSalesforceEndpointEvent.mock.calls)).not.toContain('client-secret-test');
     expect(JSON.stringify(recordSalesforceEndpointEvent.mock.calls)).not.toContain('signature');
+  });
+
+  test.each([
+    [false, false, '', null],
+    [0, 0, '', null],
+    [true, false, '30', null],
+    [false, true, '', 50000],
+    [true, true, '30', 50000],
+    [1, 1, '30', 50000],
+  ])('applies term approval %s and limit approval %s independently', async (termApproved, limitApproved, terms, creditLimit) => {
+    getModels().Request.findOne.mockResolvedValue({
+      ...request,
+      IS_TERM_APPROVED: termApproved,
+      IS_LIMIT_APPROVED: limitApproved,
+      APPROVED_TERM_ID: 30,
+      APPROVED_LIMIT_AMOUNT: '50000',
+    });
+
+    await syncRequestStatus('request-1', '94589a22-12e5-4298-aa30-06295acbe1b9');
+
+    expect(getModels().Request.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      attributes: expect.arrayContaining(['IS_TERM_APPROVED', 'IS_LIMIT_APPROVED']),
+    }));
+    const body = JSON.parse(global.fetch.mock.calls[1][1].body);
+    expect(body.credit).toEqual({
+      credit_id: 'crm-credit-id',
+      credit_status: '100000003',
+      credit_limit: creditLimit,
+      terms,
+      rating: 'rating-id',
+    });
+    expect(recordSalesforceEndpointEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({ requestBody: body }));
+  });
+
+  test.each([false, true])('validates the credit limit only when limit approval is %s', async (limitApproved) => {
+    getModels().Request.findOne.mockResolvedValue({
+      ...request,
+      IS_LIMIT_APPROVED: limitApproved,
+      APPROVED_LIMIT_AMOUNT: 'invalid',
+      APPROVED_RATING_ID: null,
+    });
+
+    const result = syncRequestStatus('request-1', '94589a22-12e5-4298-aa30-06295acbe1b9');
+    if (limitApproved) {
+      await expect(result).rejects.toThrow('Approved credit limit is invalid');
+      expect(global.fetch).not.toHaveBeenCalled();
+    } else {
+      await expect(result).resolves.toEqual({ success: true });
+      expect(JSON.parse(global.fetch.mock.calls[1][1].body).credit).toEqual(expect.objectContaining({
+        credit_limit: null,
+        rating: '',
+      }));
+    }
   });
 
   test('treats Salesforce Success false as a sync failure and logs the update result', async () => {
@@ -100,9 +157,25 @@ describe('salesforceStatusSyncService', () => {
       httpStatus: 200,
       message: 'Rejected [REDACTED] [REDACTED]',
       response: { Success: false, ErrMsg: 'Rejected [REDACTED] [REDACTED]' },
+      requestBody: JSON.parse(global.fetch.mock.calls[1][1].body),
     }));
     expect(JSON.stringify(recordSalesforceEndpointEvent.mock.calls)).not.toContain('token-secret');
     expect(JSON.stringify(recordSalesforceEndpointEvent.mock.calls)).not.toContain('client-secret-test');
+  });
+
+  test('logs the attempted update body when the network request fails', async () => {
+    global.fetch.mockReset()
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => JSON.stringify({ access_token: 'token-secret' }) })
+      .mockRejectedValueOnce(new Error('Request timed out'));
+
+    await expect(syncRequestStatus('request-1', '94589a22-12e5-4298-aa30-06295acbe1b9'))
+      .rejects.toThrow('Request timed out');
+
+    expect(recordSalesforceEndpointEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      success: false,
+      httpStatus: null,
+      requestBody: JSON.parse(global.fetch.mock.calls[1][1].body),
+    }));
   });
 
   test('does not call Salesforce for unrelated statuses', async () => {
