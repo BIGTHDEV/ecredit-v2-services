@@ -74,6 +74,9 @@ describe('salesforceStatusSyncService', () => {
       bank_guarantee: false,
       bank_guarantee_amount: 0,
       cash_deposit: 0,
+      status_request: '',
+      date_from: null,
+      date_to: null,
     });
     expect(recordSalesforceEndpointEvent).toHaveBeenNthCalledWith(1, expect.objectContaining({
       ...eventContext,
@@ -114,6 +117,10 @@ describe('salesforceStatusSyncService', () => {
         'IS_WITHIN_APPROVED_LIMIT_APPROVED',
         'IS_BANK_GUARANTEE_APPROVED',
         'IS_CASH_DEPOSIT_APPROVED',
+        'IS_PERMANENT_APPROVED',
+        'IS_TEMPORARY_APPROVED',
+        'APPROVED_VALID_FROM',
+        'APPROVED_VALID_TO',
       ]),
     }));
     const body = JSON.parse(global.fetch.mock.calls[1][1].body);
@@ -159,8 +166,37 @@ describe('salesforceStatusSyncService', () => {
       bank_guarantee: false,
       bank_guarantee_amount: 0,
       cash_deposit: 0,
+      status_request: '',
+      date_from: null,
+      date_to: null,
     });
     expect(recordSalesforceEndpointEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({ requestBody: body }));
+  });
+
+  test.each([
+    [true, false, 'Permanent', '2026-10-30', null],
+    [false, true, 'Temporary', '2026-10-30', '2026-12-31'],
+    [true, true, 'Permanent', '2026-10-30', '2026-12-31'],
+    [1, 0, 'Permanent', '2026-10-30', null],
+    [0, 1, 'Temporary', '2026-10-30', '2026-12-31'],
+    [0, 0, '', null, null],
+  ])('maps validity approval %s/%s into Salesforce fields', async (permanentApproved, temporaryApproved, statusRequest, dateFrom, dateTo) => {
+    getModels().Request.findOne.mockResolvedValue({
+      ...request,
+      IS_PERMANENT_APPROVED: permanentApproved,
+      IS_TEMPORARY_APPROVED: temporaryApproved,
+      APPROVED_VALID_FROM: '2026-10-30T00:00:00.000Z',
+      APPROVED_VALID_TO: '2026-12-31T00:00:00.000Z',
+    });
+
+    await syncRequestStatus('request-1', '94589a22-12e5-4298-aa30-06295acbe1b9');
+
+    const body = JSON.parse(global.fetch.mock.calls[1][1].body);
+    expect(body.credit).toEqual(expect.objectContaining({
+      status_request: statusRequest,
+      date_from: dateFrom,
+      date_to: dateTo,
+    }));
   });
 
   test.each([false, true])('validates the credit limit only when limit approval is %s', async (limitApproved) => {

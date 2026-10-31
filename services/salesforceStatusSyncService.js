@@ -27,6 +27,12 @@ function isApproved(value) {
   return value === true || value === 1 || value === '1';
 }
 
+function formatDate(value) {
+  if (value == null || value === '') return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
 async function logEndpoint(context, endpoint, result) {
   if (context === null) return;
   try {
@@ -131,6 +137,7 @@ async function syncRequestStatus(requestId, statusId, context = {}) {
       'APPROVED_BANK_GUARANTEE_AMOUNT', 'APPROVED_CASH_DEPOSIT_AMOUNT',
       'IS_CLEAR_OUTSTANDING_BALANCE_APPROVED', 'IS_WITHIN_APPROVED_LIMIT_APPROVED',
       'IS_BANK_GUARANTEE_APPROVED', 'IS_CASH_DEPOSIT_APPROVED',
+      'IS_PERMANENT_APPROVED', 'IS_TEMPORARY_APPROVED', 'APPROVED_VALID_FROM', 'APPROVED_VALID_TO',
     ],
   });
   if (!request) throw new Error(`Request ${requestId} was not found after its status changed.`);
@@ -154,6 +161,8 @@ async function syncRequestStatus(requestId, statusId, context = {}) {
   }
   const bankGuaranteeApproved = isApproved(request.IS_BANK_GUARANTEE_APPROVED);
   const cashDepositApproved = isApproved(request.IS_CASH_DEPOSIT_APPROVED);
+  const permanentApproved = isApproved(request.IS_PERMANENT_APPROVED);
+  const temporaryApproved = isApproved(request.IS_TEMPORARY_APPROVED);
   const bankGuaranteeAmount = bankGuaranteeApproved
     ? (request.APPROVED_BANK_GUARANTEE_AMOUNT == null ? 0 : Number(request.APPROVED_BANK_GUARANTEE_AMOUNT))
     : 0;
@@ -180,6 +189,9 @@ async function syncRequestStatus(requestId, statusId, context = {}) {
       bank_guarantee: bankGuaranteeApproved,
       bank_guarantee_amount: bankGuaranteeAmount,
       cash_deposit: cashDepositAmount,
+      status_request: permanentApproved ? 'Permanent' : temporaryApproved ? 'Temporary' : '',
+      date_from: permanentApproved || temporaryApproved ? formatDate(request.APPROVED_VALID_FROM) : null,
+      date_to: temporaryApproved ? formatDate(request.APPROVED_VALID_TO) : null,
     },
   }, {
     authorization: `Bearer ${tokenResponse.access_token}`,
