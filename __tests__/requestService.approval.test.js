@@ -198,7 +198,24 @@ describe('requestService.processApprovalAction', () => {
     );
   });
 
-  it('changes approval status when approving the selected approval ID', async () => {
+  it.each([
+    {
+      IS_CLEAR_OUTSTANDING_BALANCE: true,
+      IS_WITHIN_APPROVED_LIMIT: false,
+      IS_BANK_GUARANTEE: true,
+      BANK_GUARANTEE_AMOUNT: 5000,
+      IS_CASH_DEPOSIT: false,
+      CASH_DEPOSIT_AMOUNT: 0,
+    },
+    {
+      IS_CLEAR_OUTSTANDING_BALANCE: false,
+      IS_WITHIN_APPROVED_LIMIT: true,
+      IS_BANK_GUARANTEE: false,
+      BANK_GUARANTEE_AMOUNT: 0,
+      IS_CASH_DEPOSIT: true,
+      CASH_DEPOSIT_AMOUNT: 7500,
+    },
+  ])('copies the last approver conditions to Final Review: %j', async (conditions) => {
     database.query
       .mockResolvedValueOnce([{ ID: approvalId, APPROVER_ID: 67890, APPROVAL_STEP: 4 }])
       .mockResolvedValueOnce([{ ID: 'approved-type' }])
@@ -210,7 +227,7 @@ describe('requestService.processApprovalAction', () => {
     await requestService.processApprovalAction(
       requestId,
       'approve',
-      approvalPayload('approve'),
+      { ...approvalPayload('approve'), ...conditions },
       updatedBy,
     );
 
@@ -230,6 +247,12 @@ describe('requestService.processApprovalAction', () => {
         APPROVED_NOTES: 'BDS Step 2 comment',
         IS_PERMANENT_APPROVED: false,
         IS_TEMPORARY_APPROVED: true,
+        IS_CLEAR_OUTSTANDING_BALANCE_APPROVED: conditions.IS_CLEAR_OUTSTANDING_BALANCE,
+        IS_WITHIN_APPROVED_LIMIT_APPROVED: conditions.IS_WITHIN_APPROVED_LIMIT,
+        IS_BANK_GUARANTEE_APPROVED: conditions.IS_BANK_GUARANTEE,
+        APPROVED_BANK_GUARANTEE_AMOUNT: conditions.BANK_GUARANTEE_AMOUNT,
+        IS_CASH_DEPOSIT_APPROVED: conditions.IS_CASH_DEPOSIT,
+        APPROVED_CASH_DEPOSIT_AMOUNT: conditions.CASH_DEPOSIT_AMOUNT,
       }),
       expect.objectContaining({ where: { ID: requestId, ENABLED: true }, transaction }),
     );

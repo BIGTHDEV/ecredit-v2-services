@@ -11,6 +11,15 @@ Express.js backend service for e-Credit application with:
 
 ## Quick Start
 
+### Final Review condition snapshot
+
+When the last pending approval is approved, the transition to Final copies all
+six Additional Conditions fields from that approval into the request's approved
+snapshot, including false flags and zero amounts. Final Review reads this
+snapshot as its initial decision values. Subsequent Final Review saves and
+confirmation update the snapshot without modifying earlier approval history.
+This applies to new transitions to Final; existing snapshots are not backfilled.
+
 ### Administration email logs
 
 `GET /requests/email-logs` lists email logs across active requests for System Admin

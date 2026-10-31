@@ -2077,6 +2077,7 @@ async function processApprovalAction(id, action, payload, updatedBy, isSystemAdm
             APPROVED_NOTES: bdsReviewCommentRows[0]?.COMMENT || '',
             IS_PERMANENT_APPROVED: normalizedUpdate.IS_PERMANENT,
             IS_TEMPORARY_APPROVED: normalizedUpdate.IS_TEMPORARY,
+            ...finalApprovedConditionFields(normalizedUpdate),
             UPDATED_BY: auditBy,
             UPDATED_DATE: Request.sequelize.fn('GETDATE'),
           },
