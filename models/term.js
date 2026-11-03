@@ -9,6 +9,7 @@ module.exports = (sequelize) =>
         primaryKey: true,
       },
       NAME: DataTypes.STRING,
+      EXPOSURE: DataTypes.DECIMAL,
     },
     {
       tableName: 'TERMS',

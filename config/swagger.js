@@ -95,7 +95,7 @@ const endpoints = [
   ['get', '/requests/statuses', 'Requests', 'List request statuses', 'Returns enabled request status options.', { dataSchema: { type: 'array', items: { $ref: '#/components/schemas/MetadataOption' } } }],
   ['get', '/requests/log-types', 'Requests', 'List event log types', 'Returns enabled request event log type options.', { dataSchema: { type: 'array', items: { $ref: '#/components/schemas/MetadataOption' } } }],
   ['get', '/requests/ratings', 'Requests', 'List ratings', 'Returns enabled request rating options.', { dataSchema: { type: 'array', items: { $ref: '#/components/schemas/MetadataOption' } } }],
-  ['get', '/requests/terms', 'Requests', 'List credit terms', 'Returns configured credit term options.', { dataSchema: { type: 'array', items: { $ref: '#/components/schemas/MetadataOption' } } }],
+  ['get', '/requests/terms', 'Requests', 'List credit terms', 'Returns configured credit term options with their numeric exposure values.', { dataSchema: { type: 'array', items: { $ref: '#/components/schemas/TermOption' } } }],
   ['get', '/requests/event-logs', 'Event Logs', 'List all event logs', 'Lists enabled events including authenticated /auth/me profile loads and Administration changes, with or without an eCredit request. Returns raw LOGS fields ID, NAME, CATEGORY alongside existing display fields. Excludes method-named routine GET, HEAD, and OPTIONS events except /auth/me; application diagnostics may still appear. LOGS retention permanently deletes records older than 90 days after startup and hourly. Unlinked request identifiers are empty strings. Access requires System Admin or Super User.', {
     dataSchema: { $ref: '#/components/schemas/PaginatedRecords' },
     query: [
@@ -638,6 +638,15 @@ const options = {
           properties: {
             id: { type: 'string' },
             label: { type: 'string' },
+          },
+        },
+        TermOption: {
+          type: 'object',
+          required: ['id', 'label', 'exposure'],
+          properties: {
+            id: { type: 'string' },
+            label: { type: 'string' },
+            exposure: { type: 'number', nullable: true, description: 'Numeric TERMS.EXPOSURE value.' },
           },
         },
         SoldToCustomerOption: {
