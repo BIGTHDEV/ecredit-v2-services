@@ -22,3 +22,38 @@ describe.each(['request-approval', 'request-backward', 'request-draft', 'request
     expect(source).not.toContain('font-weight:bolder;font-size:20pt;');
   });
 });
+
+describe('Permanent Adjustment email values', () => {
+  const completedDate = '2030-12-31';
+  const valuesFor = (template, model) => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'templates', `${template}.hbs`), 'utf8');
+    const html = handlebars.compile(source)(model);
+    return [...html.matchAll(/<td class="label">Permanent Adjustment<\/td>\s*<td class="value">([\s\S]*?)<\/td>/g)]
+      .map(([, value]) => value.trim());
+  };
+
+  test.each([
+    ['request-approval', {
+      suggestedCreditDetails: { permanentYes: true, validFrom: completedDate },
+      lastActionedStep: { permanentYes: true, validFrom: completedDate },
+    }, 2],
+    ['request-final', {
+      suggestedCreditDetails: { permanentYes: true, validFrom: completedDate },
+      finalActionedStep: { permanentYes: true, validFrom: completedDate },
+    }, 2],
+    ['request-rejected', {
+      suggestedCreditDetails: { permanentYes: true, validFrom: completedDate },
+      lastActionedStep: { permanentYes: true, validFrom: completedDate },
+    }, 2],
+  ])('%s shows a checkmark instead of the date', (template, model, expectedRows) => {
+    expect(valuesFor(template, model)).toEqual(
+      Array(expectedRows).fill('<span class="status-yes">&#10003;</span>'),
+    );
+  });
+
+  test('request-completed keeps the Permanent Adjustment date', () => {
+    expect(valuesFor('request-completed', {
+      finalConfirmedDetails: { permanentYes: true, validFrom: completedDate },
+    })).toEqual([completedDate]);
+  });
+});

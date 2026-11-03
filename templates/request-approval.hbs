@@ -495,7 +495,7 @@
                             <tr>
                                 <td class="label">Permanent Adjustment</td>
                                 <td class="value">{{#if
-                                    suggestedCreditDetails.permanentYes}}{{suggestedCreditDetails.validFrom}}{{else}}-{{/if}}
+                                    suggestedCreditDetails.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}
                                 </td>
                             </tr>
                         </table>
@@ -575,7 +575,7 @@
                 <tr>
                     <td class="label">Permanent Adjustment</td>
                     <td class="value">{{#if
-                        lastActionedStep.permanentYes}}{{lastActionedStep.validFrom}}{{else}}-{{/if}}</td>
+                        lastActionedStep.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}</td>
                 </tr>
             </table>
             {{/unless}}

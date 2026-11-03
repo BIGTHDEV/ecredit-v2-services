@@ -344,7 +344,7 @@
                 <tr class="brand-header">
                     <td>
                         <p class="brand-name">e-Credit System</p>
-                        <p class="brand-subtitle">Credit request summary and final approval details</p>
+                                <td class="value">{{#if finalConfirmedDetails.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}</td>
                     </td>
                 </tr>
                 <tr>
@@ -554,7 +554,7 @@
                             <tr>
                                 <td class="label">Permanent Adjustment</td>
                                 <td class="value">{{#if
-                                    suggestedCreditDetails.permanentYes}}{{suggestedCreditDetails.validFrom}}{{else}}-{{/if}}
+                                    suggestedCreditDetails.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}
                                 </td>
                             </tr>
                         </table>
@@ -634,7 +634,7 @@
                 <tr>
                     <td class="label">Permanent Adjustment</td>
                     <td class="value">{{#if
-                        finalActionedStep.permanentYes}}{{finalActionedStep.validFrom}}{{else}}-{{/if}}</td>
+                        finalActionedStep.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}</td>
                 </tr>
             </table>
             {{/unless}}
