@@ -96,11 +96,14 @@ const endpoints = [
   ['get', '/requests/log-types', 'Requests', 'List event log types', 'Returns enabled request event log type options.', { dataSchema: { type: 'array', items: { $ref: '#/components/schemas/MetadataOption' } } }],
   ['get', '/requests/ratings', 'Requests', 'List ratings', 'Returns enabled request rating options.', { dataSchema: { type: 'array', items: { $ref: '#/components/schemas/MetadataOption' } } }],
   ['get', '/requests/terms', 'Requests', 'List credit terms', 'Returns configured credit term options.', { dataSchema: { type: 'array', items: { $ref: '#/components/schemas/MetadataOption' } } }],
-  ['get', '/requests/event-logs', 'Event Logs', 'List all event logs', 'Lists event logs across requests. Access is subject to the caller’s e-Credit permissions.', {
+  ['get', '/requests/event-logs', 'Event Logs', 'List all event logs', 'Lists enabled events including authenticated /auth/me profile loads and Administration changes, with or without an eCredit request. Returns raw LOGS fields ID, NAME, CATEGORY alongside existing display fields. Excludes method-named routine GET, HEAD, and OPTIONS events except /auth/me; application diagnostics may still appear. LOGS retention permanently deletes records older than 90 days after startup and hourly. Unlinked request identifiers are empty strings. Access requires System Admin or Super User.', {
     dataSchema: { $ref: '#/components/schemas/PaginatedRecords' },
     query: [
       ['page', 'integer', 'Page number (1-based).'],
       ['pageSize', 'integer', 'Maximum 100 records per page; defaults to 25.'],
+      ['ID', 'string', 'Raw LOGS.ID filter.'],
+      ['NAME', 'string', 'Raw LOGS.NAME filter.'],
+      ['CATEGORY', 'string', 'Raw LOGS.CATEGORY filter.'],
       ['NO', 'string', 'Request number filter.'],
       ['CRM_NO', 'string', 'CRM number filter.'],
       ['SOLD_TO', 'string', 'Sold-to customer filter.'],
@@ -1210,7 +1213,7 @@ const options = {
       { name: 'Permissions', description: 'Effective permission catalog and role permission management' },
       { name: 'Users', description: 'User directory, access, permissions, and View As administration' },
       { name: 'Approvers', description: 'Approver configuration and employee options' },
-      { name: 'Event Logs', description: 'Request event log search and details' },
+      { name: 'Event Logs', description: 'Authentication, Administration, and request event log search and details' },
       { name: 'Email Logs', description: 'Email log inspection and controlled resend operations' },
       { name: 'Email Approval', description: 'Token-based approval actions from email links' },
       { name: 'Notifications', description: 'Authenticated user notification inbox and read state' },

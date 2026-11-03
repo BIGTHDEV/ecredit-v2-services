@@ -303,6 +303,46 @@ after the eCredit status is committed, the API returns the CRM failure and the
 frontend displays a support modal. There are no environment-specific controller
 or route folders.
 
+### Event Logs
+
+Administration Event Logs lists enabled events with or without an eCredit request.
+It includes authenticated data-changing operations (POST, PUT, PATCH, DELETE),
+including Administration changes, and authenticated `GET /<env>/api/auth/me`
+calls used to load the user after sign-in. Profile refreshes also call this endpoint
+and can therefore produce additional authentication events. Routine GET, HEAD,
+and OPTIONS requests are not persisted as new API audit events; the Administration
+list also excludes historical method-named routine-read events while retaining
+`api.auth.me` events. Winston application diagnostics are a separate source of
+`system.activity` / `request.activity` rows; successful token validation,
+authentication, data reads and session pings previously produced frequent debug
+rows. The selected successful diagnostic messages are now excluded from database
+logging, while console logging follows its existing configuration. Successful
+`POST /session/presence` and `GET /session/ping` heartbeats do not create API audit
+rows; heartbeat failures are retained when an employee profile is available.
+Login/profile-load API audits (`GET /auth/me`), data changes, warning/error
+diagnostics and startup information remain enabled. This affects new writes only;
+existing diagnostic rows are not selectively removed before their retention age.
+
+Global event summaries and details expose the raw `LOGS` fields `ID`, `NAME`,
+and `CATEGORY` alongside the existing display fields. All three raw fields support
+substring filtering (maximum 100 characters) and ascending/descending sorting.
+
+`logRetentionService` permanently deletes `LOGS` rows whose `CREATED_DATE` is
+strictly older than 90 days using SQL Server `GETDATE()` (the same clock used to
+write events). Cleanup runs after normal API startup and every hour after the
+previous run finishes, in batches of at most 1,000 rows. It includes disabled rows
+and all categories/severities; rows with an unknown/null creation date are left
+untouched. Data within the most recent 90 days is retained. Expired data can remain
+until the next hourly run or while the API is offline. Errors are logged and
+retried at the next run. Shutdown finishes the current batch without starting a
+new one. Startup-check mode does not start cleanup. Email Logs and other tables
+are not purged. Back up any older audit data before deploying/restarting the API.
+
+Request details are optional, including for deleted/disabled requests. When no
+request is linked, `NO`, `CRM_NO`, `SOLD_TO`, and `CUSTOMER_TAX_NO` are empty strings
+in the API response and the existing UI displays `-`. Payloads continue to use
+the centralized sensitive-value redaction. No database migration is required.
+
 ## API Endpoints
 
 ### Public Endpoints

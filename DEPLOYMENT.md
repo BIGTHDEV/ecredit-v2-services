@@ -25,6 +25,32 @@ send only to the current logged-in tester, with no CC/BCC, including resends and
 View As sessions. If an email action has no logged-in tester context in DEV/QAS,
 the notification is not sent; it never falls back to the audit mailbox.
 
+## LOGS Retention
+
+Normal API startup starts automatic physical deletion of `LOGS` older than 90
+days, then checks hourly. Back up/export older audit records before deploying or
+restarting this version. This applies to every severity/category, including
+request events; historical event details older than the retention window will
+no longer be available. `EMAIL_LOGS`, approvals and other business tables are not
+deleted. No new migration or environment variables are required.
+
+The scheduler uses the active environment's database, requires DELETE permission
+on `LOGS`, and deletes at most 1,000 rows per statement. It uses
+`CREATED_DATE < DATEADD(DAY, -90, GETDATE())`; records exactly on the cutoff and
+null dates are not deleted. It does not run with `STARTUP_CHECK_ONLY=true`.
+Multiple API instances may run idempotent cleanup; a failed batch is logged and
+retried next hour. For large existing tables, review a suitable `CREATED_DATE`
+index with the DBA to avoid expensive repeated scans. No database cleanup is run
+by build or unit tests.
+
+Preview the affected row count in the intended environment before deployment:
+
+```sql
+SELECT COUNT_BIG(*) AS ExpiredLogCount
+FROM LOGS
+WHERE CREATED_DATE < DATEADD(DAY, -90, GETDATE());
+```
+
 ## Scheduled Maintenance
 
 Before deploying, run

@@ -378,16 +378,32 @@ If credentials are compromised:
 
 ### Audit Trail
 
-All API requests are logged with:
+Database Event Logs record authenticated data-changing API requests and
+authenticated `/auth/me` profile loads (including after sign-in and on profile
+refresh). Routine GET, HEAD, and OPTIONS requests are excluded, except for
+`GET /auth/me`. The Administration event list also hides historical routine-read
+events and includes events without an eCredit request. Events contain:
 - Timestamp
 - Correlation ID
-- User identity (oid, tid)
+- Employee identity
 - HTTP method and endpoint
 - Status code
 - Response time
-- Any errors
+- Redacted request payload
 
 Use correlation IDs to trace requests across systems for compliance audits.
+Requests without a resolved employee profile, including rejected sign-ins, do not
+produce database Event Logs; authentication failures remain in application logs.
+
+All `LOGS` rows with a known `CREATED_DATE` are subject to automatic 90-day
+retention, including security warnings/errors and request audit events. Cleanup
+physically deletes older rows after API startup and hourly; it is not an archive
+or soft delete. Export records before deployment if longer compliance retention
+is required. Winston application diagnostics remain enabled independently of API
+audit read filtering. Routine successful debug messages for token validation,
+authentication, profile/data reads and session pings are excluded from database
+logging. Successful presence/ping API heartbeats are also omitted; failures,
+Login/profile-load audits, mutations and warning/error diagnostics are retained.
 
 ### Data Minimization
 

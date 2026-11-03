@@ -13,6 +13,7 @@ const requestLoggerMiddleware = require('./middlewares/requestLogger');
 const errorHandlerMiddleware = require('./middlewares/errorHandler');
 const environmentRouter = require('./routes');
 const { startEmailReminderScheduler } = require('./services/emailReminderService');
+const { startLogRetentionScheduler } = require('./services/logRetentionService');
 
 /**
  * Express Server Application
@@ -145,6 +146,7 @@ app.use(errorHandlerMiddleware);
 let server;
 let isShuttingDown = false;
 let stopEmailReminderScheduler;
+let stopLogRetentionScheduler;
 
 async function startServer() {
   try {
@@ -179,6 +181,7 @@ async function startServer() {
         gracefulShutdown('startup check completed');
       } else {
         stopEmailReminderScheduler = startEmailReminderScheduler();
+        stopLogRetentionScheduler = startLogRetentionScheduler();
       }
     });
   } catch (error) {
@@ -206,6 +209,7 @@ async function gracefulShutdown(signal) {
       process.exit(1);
     }, 30000);
     if (stopEmailReminderScheduler) await stopEmailReminderScheduler();
+    if (stopLogRetentionScheduler) await stopLogRetentionScheduler();
     // Close HTTPS server
     if (server) {
       server.close(async () => {

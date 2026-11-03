@@ -64,7 +64,13 @@ describe('global event logs', () => {
     const result = await listAllEvents({ page: '2', pageSize: '10' });
 
     expect(Log.findAndCountAll).toHaveBeenCalledWith(expect.objectContaining({
-      where: { ENABLED: true, REQUEST_ID: { [Op.not]: null } },
+      where: {
+        ENABLED: true,
+        [Op.or]: [
+          { [Op.not]: { [Op.or]: ['GET', 'HEAD', 'OPTIONS'].map((method) => ({ NAME: { [Op.like]: `${method} %` } })) } },
+          { CATEGORY: 'api.auth.me' },
+        ],
+      },
       limit: 10,
       offset: 10,
       order: [['CREATED_DATE', 'DESC']],
@@ -72,8 +78,7 @@ describe('global event logs', () => {
       include: expect.arrayContaining([
         expect.objectContaining({
           as: 'request',
-          required: true,
-          where: { ENABLED: true },
+          required: false,
           on: expect.objectContaining({ val: expect.stringContaining('COLLATE DATABASE_DEFAULT') }),
         }),
       ]),
@@ -81,6 +86,9 @@ describe('global event logs', () => {
     expect(result).toEqual(expect.objectContaining({
       items: [expect.objectContaining({
         id: 'log-1',
+        ID: 'log-1',
+        NAME: eventLog.NAME,
+        CATEGORY: eventLog.CATEGORY,
         NO: 'REQ-001',
         CRM_NO: 'CRM-001',
         SOLD_TO: 'CUST-001',
@@ -103,6 +111,36 @@ describe('global event logs', () => {
     }));
     expect(result.payload).toEqual({ request: { method: 'PATCH', body: { value: 'test' } } });
     expect(result.NO).toBe('REQ-001');
+  });
+
+  it('lists login and administration events without request identifiers', async () => {
+    const events = [
+      { ...eventLog, NAME: 'GET auth me', CATEGORY: 'api.auth.me', REQUEST_ID: null, request: null },
+      { ...eventLog, NAME: 'PATCH users 123', CATEGORY: 'api.users.123', REQUEST_ID: null, request: null },
+    ];
+    Log.findAndCountAll.mockResolvedValue({ count: 2, rows: events });
+
+    const result = await listAllEvents({});
+
+    expect(result.items).toEqual(events.map((event) => expect.objectContaining({
+      name: event.NAME,
+      requestId: '',
+      NO: '',
+      CRM_NO: '',
+      SOLD_TO: '',
+      CUSTOMER_TAX_NO: '',
+    })));
+    expect(result.pagination.totalItems).toBe(2);
+  });
+
+  it('opens a login payload without looking up a request', async () => {
+    Log.findOne.mockResolvedValue({ ...eventLog, REQUEST_ID: null });
+
+    const result = await getAllEvent('log-1');
+
+    expect(Request.findOne).not.toHaveBeenCalled();
+    expect(result.NO).toBe('');
+    expect(result.payload).toEqual({ request: { method: 'PATCH' } });
   });
 
   it('filters and sorts by visible event-log columns', async () => {
@@ -143,6 +181,14 @@ describe('global event logs', () => {
     expect(Log.findAndCountAll.mock.calls[0][0].order).toEqual([['CREATED_DATE', 'DESC']]);
   });
 
+  it.each(['ID', 'NAME', 'CATEGORY'])('filters and sorts the raw %s column', async (field) => {
+    await listAllEvents({ [field]: 'raw-value', sort: field, dir: 'asc' });
+
+    const query = Log.findAndCountAll.mock.calls[0][0];
+    expect(query.where[field]).toEqual({ [Op.like]: '%raw-value%' });
+    expect(query.order).toEqual([[field, 'ASC'], ['CREATED_DATE', 'DESC']]);
+  });
+
   it.each(['event-logs', 'email-logs'])('does not record reads of the global %s API as new events', async (path) => {
     await persistRequestEvent({
       req: {
@@ -155,6 +201,45 @@ describe('global event logs', () => {
     });
 
     expect(Log.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['GET', '/dev/api/requests/request-1'],
+    ['GET', '/qas/api/users'],
+    ['GET', '/prd/api/approvers'],
+    ['GET', '/dev/api/requests/request-1/attachments'],
+    ['HEAD', '/dev/api/auth/me'],
+    ['OPTIONS', '/dev/api/users'],
+  ])('does not record routine %s %s events', async (method, originalUrl) => {
+    await persistRequestEvent({
+      req: { method, originalUrl, user: { profile: { CODE: 123 } } },
+      res: { statusCode: 200, locals: {} },
+      durationMs: 5,
+    });
+
+    expect(Log.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['GET', '/dev/api/auth/me', 'api.auth.me'],
+    ['GET', '/qas/api/auth/me?session=active', 'api.auth.me'],
+    ['POST', '/dev/api/users', 'api.users'],
+    ['PATCH', '/qas/api/users/123', 'api.users.123'],
+    ['PUT', '/prd/api/approvers/123', 'api.approvers.123'],
+    ['DELETE', '/dev/api/approvers/123', 'api.approvers.123'],
+  ])('records %s %s without requiring an eCredit number', async (method, originalUrl, category) => {
+    await persistRequestEvent({
+      req: { method, originalUrl, user: { profile: { CODE: 123 } }, query: {}, body: {} },
+      res: { statusCode: 200, locals: {} },
+      durationMs: 5,
+    });
+
+    expect(Log.create).toHaveBeenCalledWith(expect.objectContaining({
+      CATEGORY: category,
+      REQUEST_ID: null,
+      CREATED_BY: 123,
+      UPDATED_BY: 123,
+    }));
   });
 
   it('persists outbound Power Platform request payloads in the event description', async () => {
@@ -185,6 +270,33 @@ describe('global event logs', () => {
     await persistRequestEvent({ req, res, durationMs: 10 });
 
     expect(JSON.parse(Log.create.mock.calls[0][0].DESCRIPTION).outboundRequests).toEqual(outboundRequests);
+  });
+
+  it.each([
+    ['POST', '/dev/api/session/presence', 204],
+    ['GET', '/qas/api/session/ping?tab=1', 200],
+  ])('does not persist successful %s %s heartbeats', async (method, originalUrl, statusCode) => {
+    await persistRequestEvent({
+      req: { method, originalUrl, user: { profile: { CODE: 123 } } },
+      res: { statusCode, locals: {} },
+      durationMs: 5,
+    });
+    expect(Log.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['POST', '/dev/api/session/presence', 400],
+    ['POST', '/prd/api/session/presence', 500],
+    ['GET', '/qas/api/session/ping', 500],
+  ])('preserves %s %s heartbeat failures with status %s', async (method, originalUrl, statusCode) => {
+    await persistRequestEvent({
+      req: { method, originalUrl, user: { profile: { CODE: 123 } }, query: {} },
+      res: { statusCode, locals: {} },
+      durationMs: 5,
+    });
+    expect(Log.create).toHaveBeenCalledWith(expect.objectContaining({
+      LOG_TYPE_ID: statusCode >= 500 ? '2d8e6e9d-0b7b-427f-a5ba-0e65f61d945b' : '69bd78f0-a012-4d47-bfed-4c0abd316877',
+    }));
   });
 
   it('notifies System Admins when an error event is persisted', async () => {
@@ -280,5 +392,7 @@ describe('global event logs', () => {
     const result = await getAllEvent('log-1');
 
     expect(result.name).toBe(displayName);
+    expect(result.NAME).toBe(storedName);
+    expect(result.CATEGORY).toBe(category);
   });
 });

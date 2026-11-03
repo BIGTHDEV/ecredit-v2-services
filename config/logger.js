@@ -157,6 +157,13 @@ function actorCode(info) {
 }
 
 async function persistLogEntry(info) {
+  if (info.level === 'debug' && [
+    /^Token validation successful$/,
+    /^Authentication successful for user /,
+    /^User profile returned for /,
+    /^(?:Customers?|Requests?|Permissions) returned$/,
+    /^Session ping from /,
+  ].some((pattern) => pattern.test(String(info.message)))) return;
   if (!isModelsInitialized()) return;
 
   const entry = createLogEntry(info);

@@ -23,11 +23,11 @@ function requestIdFromPath(requestPath) {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-function isEventLogReadRequest(method, requestPath) {
-  return (
-    String(method).toUpperCase() === 'GET' &&
-    /\/requests\/(?:(?:event-logs|email-logs)(?:\/[^/?]+)?|[^/?]+\/event-logs(?:\/[^/?]+)?)\/?(?:\?.*)?$/i.test(String(requestPath || ''))
-  );
+function isRoutineReadRequest(method, requestPath) {
+  const normalizedMethod = String(method).toUpperCase();
+  const isLogin = normalizedMethod === 'GET'
+    && /\/auth\/me\/?(?:\?.*)?$/i.test(String(requestPath || ''));
+  return ['GET', 'HEAD', 'OPTIONS'].includes(normalizedMethod) && !isLogin;
 }
 
 function logTypeForStatus(statusCode) {
@@ -188,6 +188,9 @@ function mapAllEventLog(log, includeDescription = false) {
   const request = record.request;
   return {
     ...mapEventLog(record, includeDescription),
+    ID: record.ID,
+    NAME: record.NAME,
+    CATEGORY: record.CATEGORY,
     requestId: record.REQUEST_ID || '',
     NO: request?.NO || '',
     CRM_NO: request?.CRM_NO || '',
@@ -288,8 +291,18 @@ async function listAllEvents(query) {
   const { Employee, Log, Request } = getModels();
   const page = normalizePage(query.page, 1);
   const pageSize = Math.min(normalizePage(query.pageSize, 25), 100);
-  const where = { ENABLED: true, REQUEST_ID: { [Op.not]: null } };
+  const where = {
+    ENABLED: true,
+    [Op.or]: [
+      { [Op.not]: { [Op.or]: ['GET', 'HEAD', 'OPTIONS'].map((method) => ({ NAME: { [Op.like]: `${method} %` } })) } },
+      { CATEGORY: 'api.auth.me' },
+    ],
+  };
   const andConditions = [];
+  for (const field of ['ID', 'NAME', 'CATEGORY']) {
+    const filter = eventLogColumnFilter(query, field);
+    if (filter) where[field] = { [Op.like]: `%${filter}%` };
+  }
   const requestFilters = {
     NO: 'NO',
     CRM_NO: 'CRM_NO',
@@ -344,11 +357,14 @@ async function listAllEvents(query) {
 
   if (andConditions.length) where[Op.and] = andConditions;
 
-  const sortableColumns = ['NO', 'CRM_NO', 'SOLD_TO', 'CUSTOMER_TAX_NO', 'logTypeId', 'createdDate', 'actor'];
+  const sortableColumns = ['ID', 'NAME', 'CATEGORY', 'NO', 'CRM_NO', 'SOLD_TO', 'CUSTOMER_TAX_NO', 'logTypeId', 'createdDate', 'actor'];
   const validSort = sortableColumns.includes(query.sort);
   const sortKey = validSort ? query.sort : 'createdDate';
   const sortDirection = validSort && query.dir === 'asc' ? 'ASC' : 'DESC';
   const sortFields = {
+    ID: ['ID'],
+    NAME: ['NAME'],
+    CATEGORY: ['CATEGORY'],
     NO: [{ model: Request, as: 'request' }, 'NO'],
     CRM_NO: [{ model: Request, as: 'request' }, 'CRM_NO'],
     SOLD_TO: [{ model: Request, as: 'request' }, 'SOLD_TO'],
@@ -369,8 +385,7 @@ async function listAllEvents(query) {
         model: Request,
         as: 'request',
         attributes: ['NO', 'CRM_NO', 'SOLD_TO', 'CUSTOMER_TAX_NO'],
-        where: { ENABLED: true },
-        required: true,
+        required: false,
         on: literal('[Log].[REQUEST_ID] COLLATE DATABASE_DEFAULT = [request].[ID] COLLATE DATABASE_DEFAULT'),
       },
     ],
@@ -437,14 +452,16 @@ function eventLogColumnFilter(query, key) {
 
 async function persistRequestEvent({ req, res, durationMs }) {
   const requestPath = req.originalUrl || req.path;
+  const statusCode = res.statusCode;
+  const sessionHeartbeat = (req.method === 'POST' && /\/session\/presence\/?(?:\?.*)?$/i.test(requestPath))
+    || (req.method === 'GET' && /\/session\/ping\/?(?:\?.*)?$/i.test(requestPath));
 
-  if (isEventLogReadRequest(req.method, requestPath)) {
+  if (sessionHeartbeat ? statusCode < 400 : isRoutineReadRequest(req.method, requestPath)) {
     return;
   }
 
   const requestId = requestIdFromPath(requestPath);
 
-  const statusCode = res.statusCode;
   const logType = logTypeForStatus(statusCode);
   const profile = req.user?.profile;
   const approvalOrFinalAction = isApprovalOrFinalAction(req.method, requestPath);
