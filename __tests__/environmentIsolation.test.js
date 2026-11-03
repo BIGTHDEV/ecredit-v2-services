@@ -72,6 +72,25 @@ test.each(['dev', 'qas', 'prd'])('%s selects its env file, database and shared r
   await request(app).get(`/${environment}/api/health/live`).expect(200);
   const docs = await request(app).get(`/${environment}/api/docs/openapi.json`).expect(200);
   expect(docs.body.servers[0].url).toBe(`https://api.example.com/${environment}/api`);
+  const documentedOperationCount = Object.values(docs.body.paths).reduce(
+    (count, pathItem) => count + Object.keys(pathItem).filter((method) => ['get', 'post', 'put', 'patch', 'delete'].includes(method)).length,
+    0,
+  );
+  expect(documentedOperationCount).toBe(87);
+  expect(docs.body.paths['/requests/{id}/approval-action'].post.requestBody.content['application/json'].schema.$ref)
+    .toBe('#/components/schemas/ApprovalAction');
+  expect(docs.body.paths['/auth/me'].get.security).toEqual([{ bearerAuth: [] }]);
+  expect(docs.body.paths['/email-approval/{token}'].get.security).toEqual([{ bearerAuth: [] }, {}]);
+  expect(docs.body.paths['/session/presence'].post.responses['204'].description)
+    .toContain('no response body');
+  expect(docs.body.paths['/docs'].get.responses['503']).toBeDefined();
+  expect(docs.body.paths['/health/live'].get.responses['503']).toBeUndefined();
+  expect(docs.body.paths['/maintenance'].get.security).toEqual([{ bearerAuth: [] }, {}]);
+  expect(docs.body.paths['/customers/tax-no-exists'].get.parameters[0].required).toBe(true);
+  expect(docs.body.paths['/requests/{id}/submit'].post.requestBody.content['application/json'].schema.$ref)
+    .toBe('#/components/schemas/ApprovalSubmitCommand');
+  expect(docs.body.paths['/approvers'].post.responses['200']).toBeDefined();
+  expect(docs.body.paths['/approvers'].post.responses['201']).toBeUndefined();
   const swaggerUi = await request(app).get(`/${environment}/api/docs/swagger-ui-init.js`).expect(200);
   expect(swaggerUi.text).toContain(`/${environment}/api/docs/openapi.json`);
   for (const other of ['dev', 'qas', 'prd'].filter((item) => item !== environment)) {
