@@ -11,6 +11,43 @@ Express.js backend service for e-Credit application with:
 
 ## Quick Start
 
+### Salesforce customer master
+
+Sold-To search and company lookup read `dbo.S_SalesforceAccount` and
+`dbo.S_CompanyMaster`. The synonyms must resolve to `Salesforce.dbo.SalesforceAccount`
+and `MDCenter_PRD.dbo.CompanyMaster`, with SELECT permission for the API account.
+Company names come from `Description`, joined using `Company_Code__c = Comp_Code`.
+Only the Customer No (Sold-To) dropdown search filters `RecordTypeName` to
+`Customer Sold-To Read Only`. Its `SC.Id IN (...)` subquery selects read-only
+account IDs whose `Sold_to_No__c` belongs to the Sold-To numbers found by the selected
+Sales Group (with explicit collation for the parameter comparison). The innermost
+Sales Group lookup is not restricted by record type; the read-only account itself
+does not have to carry that Sales Group. Results use `ORDER BY SC.Id`; existing
+number/name search filters and the 50-result limit remain.
+This record-type restriction does not apply to customer-list/detail or request lookups.
+Request account lookups prioritize `REQUESTS.SOLD_ID`; only absent IDs fall back
+to the existing Sold-To lookup. A supplied but missing ID is not silently replaced
+by another account with the same customer number. No active/deleted/type filter
+is added. Existing request snapshots remain authoritative and are not rewritten.
+
+Customer Extensions use only `CUSTOMERS.TAX_NO` to match Salesforce `Tax_Id__c`.
+Basic Information (names, Sold-To, Sales Group, phone, fax and English address)
+is read from Salesforce on every customer list/detail load, not from REQUESTS.
+Company Code/Description comes from that same master account joined to CompanyMaster.
+These fields are not stored in CUSTOMERS and require no new columns or migration.
+Customer create/update payloads do not use or persist `SOLD_ID`;
+the existing `CUSTOMERS.SOLD_ID` database column is left untouched and unused.
+One Customer Extension per Tax ID remains enforced. When multiple accounts match,
+all Basic Information fields consistently use shortest-English-name ordering, then
+name and Account ID as deterministic tie-breakers. The previously selected account
+or Sales Group is not retained; missing master values remain empty. Request snapshots
+remain unchanged and authoritative for Requests, not for Customer Extensions.
+Tax comparisons collate/convert the customer value to the source column's type and
+collation rather than applying a collation expression to the source search column;
+master projection and company joins normalize collation explicitly.
+Snapshot columns retain varchar storage as requested; Unicode outside its code
+page is not guaranteed. See DEPLOYMENT.md for the manually applied schema requirements.
+
 ### Final Review condition snapshot
 
 When the last pending approval is approved, the transition to Final copies all

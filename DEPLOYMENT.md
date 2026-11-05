@@ -10,6 +10,37 @@
 
 ## Runtime Environment
 
+### Salesforce master prerequisites
+
+The operator reports these schema changes applied manually in DEV/QAS/PRD:
+`CUSTOMERS.SOLD_ID varchar(50)` was added but is now unused by Customer Extensions;
+leave the column and existing values untouched. `REQUESTS.SOLD_ID varchar(50)`
+remains in use for request account lookups. Customer account lookups do not depend
+on `CUSTOMERS.SOLD_ID`.
+`REQUESTS.CUSTOMER_NAME_TH`, `CUSTOMER_NAME_ENG`, `CUSTOMER_PHONE`, `CUSTOMER_FAX`
+and `SEARCH_TERM` are `varchar(255)`; `CUSTOMER_ADDRESS` is `varchar(max)`.
+Existing nullability and collation are retained. The API does not apply schema
+changes or rewrite historical snapshots. Varchar code-page restrictions remain.
+
+Verify `dbo.S_SalesforceAccount` resolves to `Salesforce.dbo.SalesforceAccount`
+and `dbo.S_CompanyMaster` to `MDCenter_PRD.dbo.CompanyMaster` in every environment,
+and grant the API account SELECT access to both targets. SQL comparisons explicitly
+normalize collation; runtime SQL Server execution and permissions still require
+environment verification. No legacy master table/view is dropped by this release.
+
+### Customer Basic Information live reads
+
+No Customer Basic Information snapshot migration is required. The previously
+prepared 20261105 snapshot-column script was withdrawn; do not run it. If columns
+were already added manually, this release does not read/write or drop them.
+Customer Extensions fetch Basic Information live from Salesforce by TAX_NO;
+company descriptions are joined through S_CompanyMaster. No REQUESTS data is used
+for this display and no request snapshot is rewritten. Missing master values
+remain empty, and duplicate-tax accounts follow deterministic name/ID ordering.
+Ensure the API has SELECT permission for both synonyms and verify live SQL
+performance/availability in the target environment. No schema/key change or API
+startup migration is introduced for these reads.
+
 Deploy the same controller and route structure for every branch. Select the runtime
 with `npm run start:dev`, `npm run start:qas`, or `npm run start:prd`; each command
 loads `.env.dev`, `.env.qas`, or `.env.prd` respectively. NSSM services select the same

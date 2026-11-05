@@ -87,6 +87,8 @@ test.each(['dev', 'qas', 'prd'])('%s selects its env file, database and shared r
   expect(docs.body.paths['/health/live'].get.responses['503']).toBeUndefined();
   expect(docs.body.paths['/maintenance'].get.security).toEqual([{ bearerAuth: [] }, {}]);
   expect(docs.body.paths['/customers/tax-no-exists'].get.parameters[0].required).toBe(true);
+  expect(docs.body.components.schemas.SoldToCustomerOption.required).not.toContain('SOLD_ID');
+  expect(docs.body.components.schemas.CustomerUpdate.properties).not.toHaveProperty('SOLD_ID');
   expect(docs.body.paths['/requests/{id}/submit'].post.requestBody.content['application/json'].schema.$ref)
     .toBe('#/components/schemas/ApprovalSubmitCommand');
   expect(docs.body.paths['/approvers'].post.responses['200']).toBeDefined();

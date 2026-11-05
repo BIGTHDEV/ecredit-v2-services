@@ -1,7 +1,6 @@
 const { Op, QueryTypes, fn, col, where, literal } = require('sequelize');
 const { randomUUID } = require('crypto');
 const { getModels } = require('../models');
-const logger = require('../config/logger');
 const customerLogService = require('./customerLogService');
 
 const QUICK_FILTER_SIZE_IDS = {
@@ -26,32 +25,17 @@ const TEXT_FILTERS = {
   SHAREHOLDERS: 'SHAREHOLDERS',
 };
 
-// Mirrors the OUTER APPLY: shortest, then alphabetically-first S_CUSTOMER name for the same tax id.
-const CUSTOMER_NAME_SUBQUERY = `(
-  SELECT TOP (1) SC.CUST_NAME_ENG
-  FROM S_CUSTOMER SC
-  WHERE SC.TAX_NO = Customer.TAX_NO
-  ORDER BY LEN(SC.CUST_NAME_ENG) ASC, SC.CUST_NAME_ENG ASC
+const CUSTOMER_TAX_MATCH = 'SC.Tax_Id__c = CONVERT(nvarchar(255), Customer.TAX_NO) COLLATE SQL_Latin1_General_CP1_CI_AS';
+
+const CUSTOMER_MASTER_FIELD = (expression, join = '') => `(
+  SELECT TOP (1) ${expression} COLLATE DATABASE_DEFAULT
+  FROM S_SalesforceAccount SC
+  ${join}
+  WHERE ${CUSTOMER_TAX_MATCH}
+  ORDER BY LEN(SC.Name) ASC, SC.Name ASC, SC.Id ASC
 )`;
 
-const LATEST_REQUEST_FIELD = (field) => `(
-  SELECT TOP (1) R.${field}
-  FROM REQUESTS R
-  WHERE R.CUSTOMER_TAX_NO = Customer.TAX_NO
-  ORDER BY R.UPDATED_DATE DESC, R.CREATED_DATE DESC
-)`;
-
-// Prefer the name captured on the latest request (same source as SOLD_TO), then fall back to CRM.
-const CUSTOMER_LOCALIZED_NAME = (requestField, crmField) => `COALESCE(
-  NULLIF(LTRIM(RTRIM(${LATEST_REQUEST_FIELD(requestField)})), '') COLLATE DATABASE_DEFAULT,
-  (
-    SELECT TOP (1) LTRIM(RTRIM(SC.${crmField})) COLLATE DATABASE_DEFAULT
-    FROM S_CUSTOMER SC
-    WHERE SC.TAX_NO = Customer.TAX_NO
-      AND NULLIF(LTRIM(RTRIM(SC.${crmField})), '') IS NOT NULL
-    ORDER BY LEN(SC.${crmField}) ASC, SC.${crmField} ASC
-  )
-)`;
+const CUSTOMER_NAME_SUBQUERY = CUSTOMER_MASTER_FIELD('SC.Name');
 
 function salesGroupName(code) {
   return ({
@@ -163,13 +147,21 @@ function buildAttributes() {
   return {
     include: [
       [literal(CUSTOMER_NAME_SUBQUERY), 'CUSTOMER_NAME'],
-      [literal(CUSTOMER_LOCALIZED_NAME('CUSTOMER_NAME_TH', 'CUST_NAME_THAI')), 'CUSTOMER_NAME_TH'],
-      [literal(CUSTOMER_LOCALIZED_NAME('CUSTOMER_NAME_ENG', 'CUST_NAME_ENG')), 'CUSTOMER_NAME_ENG'],
-      [literal(LATEST_REQUEST_FIELD('SOLD_TO')), 'SOLD_TO'],
-      [literal(LATEST_REQUEST_FIELD('REQUESTED_SALES_GROUP')), 'SALES_GROUP_CODE'],
-      [literal(LATEST_REQUEST_FIELD('CUSTOMER_PHONE')), 'PHONE'],
-      [literal(LATEST_REQUEST_FIELD('CUSTOMER_FAX')), 'FAX'],
-      [literal(LATEST_REQUEST_FIELD('CUSTOMER_ADDRESS')), 'ADDRESS'],
+      [literal(CUSTOMER_MASTER_FIELD('LTRIM(RTRIM(SC.NameLocal))')), 'CUSTOMER_NAME_TH'],
+      [literal(CUSTOMER_MASTER_FIELD('LTRIM(RTRIM(SC.Name))')), 'CUSTOMER_NAME_ENG'],
+      [literal(CUSTOMER_MASTER_FIELD('SC.Sold_to_No__c')), 'SOLD_TO'],
+      [literal(CUSTOMER_MASTER_FIELD('SC.Sales_Group__c')), 'SALES_GROUP_CODE'],
+      [literal(CUSTOMER_MASTER_FIELD('SC.Phone')), 'PHONE'],
+      [literal(CUSTOMER_MASTER_FIELD('SC.Fax')), 'FAX'],
+      [literal(CUSTOMER_MASTER_FIELD(`CONCAT(SC.House_Number_EN__c, N' ', SC.Address_1_EN__c, N' ',
+        SC.Sub_District_EN_r_Name__c, N' ', SC.District_EN_r_Name__c, N' ',
+        SC.Province_EN_r_Name__c, N' ', SC.Zip_Code__c)`)), 'ADDRESS'],
+      [literal(CUSTOMER_MASTER_FIELD(`CONCAT(
+        COALESCE(LTRIM(RTRIM(SC.Company_Code__c)), N'') COLLATE DATABASE_DEFAULT,
+        CASE WHEN NULLIF(LTRIM(RTRIM(SC.Company_Code__c)), N'') IS NOT NULL
+          AND NULLIF(LTRIM(RTRIM(TB2.Description)), '') IS NOT NULL THEN N' - ' ELSE N'' END,
+        COALESCE(LTRIM(RTRIM(TB2.Description)), '') COLLATE DATABASE_DEFAULT)`,
+      'LEFT JOIN S_CompanyMaster TB2 ON SC.Company_Code__c COLLATE DATABASE_DEFAULT = TB2.Comp_Code COLLATE DATABASE_DEFAULT')), 'COMPANY_CODE'],
     ],
   };
 }
@@ -241,6 +233,7 @@ function mapCustomer(customer) {
     CUSTOMER_NAME: customer.get('CUSTOMER_NAME') || '',
     CUSTOMER_NAME_TH: customer.get('CUSTOMER_NAME_TH') || '',
     CUSTOMER_NAME_ENG: customer.get('CUSTOMER_NAME_ENG') || '',
+    COMPANY_CODE: customer.get('COMPANY_CODE') || '',
     SOLD_TO: customer.get('SOLD_TO') || '',
     SALES_GROUP: salesGroupName(customer.get('SALES_GROUP_CODE')),
     PHONE: customer.get('PHONE') || '',
@@ -310,16 +303,7 @@ async function getCustomerById(id) {
 
   if (!customer) return null;
 
-  const mapped = mapCustomer(customer);
-  // Lazy require keeps the customer service free of requestService's dependency graph at load time.
-  const { getCompanyCode } = require('./requestService');
-  try {
-    mapped.COMPANY_CODE = await getCompanyCode(mapped.SOLD_TO);
-  } catch (error) {
-    logger.warn(`Unable to resolve company code for customer ${id}: ${error.message}`);
-    mapped.COMPANY_CODE = '';
-  }
-  return mapped;
+  return mapCustomer(customer);
 }
 
 function validationError(message) {
@@ -408,19 +392,34 @@ async function searchSoldToCustomers(search, salesGroup) {
   const { Customer } = getModels();
   const rows = await Customer.sequelize.query(
     `SELECT TOP (50)
-       SOLDTO_NO,
-       SOLDTO_NAME_ENG,
-       SOLDTO_NAME_THAI,
-       CUST_PHONE,
-       CUST_FAX,
-       ADDRESS_ENG_SOLDTO,
-       TAX_NO,
-       COMPANY_CODE,
-       COMPANY_NAME
-     FROM S_vw_CustomerShipTo
-     WHERE SALE_GROUP = :salesGroup
-       AND (SOLDTO_NO LIKE :search OR SOLDTO_NAME_ENG LIKE :search)
-     ORDER BY SOLDTO_NO`,
+       SC.Sold_to_No__c AS SOLDTO_NO,
+       SC.Name AS SOLDTO_NAME_ENG,
+       SC.NameLocal AS SOLDTO_NAME_THAI,
+       SC.Phone AS CUST_PHONE,
+       SC.Fax AS CUST_FAX,
+       CONCAT(SC.House_Number_EN__c, N' ', SC.Address_1_EN__c, N' ',
+         SC.Sub_District_EN_r_Name__c, N' ', SC.District_EN_r_Name__c, N' ',
+         SC.Province_EN_r_Name__c, N' ', SC.Zip_Code__c) AS ADDRESS_ENG_SOLDTO,
+       SC.Tax_Id__c AS TAX_NO,
+       SC.Company_Code__c AS COMPANY_CODE,
+       TB2.Description AS COMPANY_NAME
+     FROM dbo.S_SalesforceAccount AS SC
+     LEFT JOIN S_CompanyMaster TB2
+       ON SC.Company_Code__c COLLATE DATABASE_DEFAULT = TB2.Comp_Code COLLATE DATABASE_DEFAULT
+     WHERE SC.RecordTypeName = N'Customer Sold-To Read Only'
+       AND SC.Id IN (
+         SELECT SO.Id
+         FROM dbo.S_SalesforceAccount AS SO
+         WHERE SO.RecordTypeName = N'Customer Sold-To Read Only'
+           AND SO.Sold_to_No__c IN (
+             SELECT SG.Sold_to_No__c
+             FROM dbo.S_SalesforceAccount AS SG
+             WHERE SG.Sales_Group__c COLLATE DATABASE_DEFAULT = :salesGroup COLLATE DATABASE_DEFAULT
+           )
+       )
+       AND (SC.Sold_to_No__c COLLATE DATABASE_DEFAULT LIKE :search COLLATE DATABASE_DEFAULT
+         OR SC.Name COLLATE DATABASE_DEFAULT LIKE :search COLLATE DATABASE_DEFAULT)
+    ORDER BY SC.Id`,
     { replacements: { salesGroup: group, search: `%${query}%` }, type: QueryTypes.SELECT },
   );
 

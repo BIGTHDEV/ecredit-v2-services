@@ -2,10 +2,8 @@
 
 jest.mock('../models', () => ({ getModels: jest.fn() }));
 jest.mock('../config/logger', () => ({ warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() }));
-jest.mock('../services/requestService', () => ({ getCompanyCode: jest.fn().mockResolvedValue('') }));
 
 const { getModels } = require('../models');
-const requestService = require('../services/requestService');
 const customerService = require('../services/customerService');
 
 describe('customerService.getCustomerById date formatting', () => {
@@ -31,6 +29,11 @@ describe('customerService.getCustomerById date formatting', () => {
       CUSTOMER_NAME_TH: 'บริษัท ตัวอย่าง จำกัด',
       CUSTOMER_NAME_ENG: 'Example Ltd.',
       SOLD_TO: '110000001',
+      COMPANY_CODE: '1000 - BIG',
+      SALES_GROUP_CODE: '100',
+      PHONE: '038994074',
+      FAX: '038994075',
+      ADDRESS: 'Example address',
     };
     getModels.mockReturnValue({
       Customer: {
@@ -39,19 +42,38 @@ describe('customerService.getCustomerById date formatting', () => {
       Size: {},
       Employee: {},
     });
-    requestService.getCompanyCode.mockResolvedValue('1000 - BIG');
-
     const result = await customerService.getCustomerById('customer-1');
 
-    expect(requestService.getCompanyCode).toHaveBeenCalledWith('110000001');
     expect(result).toEqual(expect.objectContaining({
       CUSTOMER_NAME_TH: 'บริษัท ตัวอย่าง จำกัด',
       CUSTOMER_NAME_ENG: 'Example Ltd.',
       COMPANY_CODE: '1000 - BIG',
+      SOLD_TO: '110000001',
+      SALES_GROUP: '100 - TGEE',
+      PHONE: '038994074',
+      FAX: '038994075',
+      ADDRESS: 'Example address',
     }));
   });
 
-  it('keeps the customer readable when the company code lookup fails', async () => {
+  it('reads updated master values on each detail load rather than retaining a snapshot', async () => {
+    const values = { PHONE: '111', ADDRESS: 'Old address' };
+    const findOne = jest.fn().mockImplementation(async () => ({
+      ID: 'customer-1', get: (key) => values[key] || '',
+    }));
+    getModels.mockReturnValue({ Customer: { findOne }, Size: {}, Employee: {} });
+
+    const first = await customerService.getCustomerById('customer-1');
+    values.PHONE = '222';
+    values.ADDRESS = 'New address';
+    const second = await customerService.getCustomerById('customer-1');
+
+    expect(first).toEqual(expect.objectContaining({ PHONE: '111', ADDRESS: 'Old address' }));
+    expect(second).toEqual(expect.objectContaining({ PHONE: '222', ADDRESS: 'New address' }));
+    expect(findOne).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns empty company information when the live master has no company value', async () => {
     getModels.mockReturnValue({
       Customer: {
         findOne: jest.fn().mockResolvedValue({ ID: 'customer-1', get: jest.fn((key) => (key === 'SOLD_TO' ? '110000001' : '')) }),
@@ -59,8 +81,6 @@ describe('customerService.getCustomerById date formatting', () => {
       Size: {},
       Employee: {},
     });
-    requestService.getCompanyCode.mockRejectedValue(new Error('MDCENTER unavailable'));
-
     const result = await customerService.getCustomerById('customer-1');
 
     expect(result.COMPANY_CODE).toBe('');

@@ -391,6 +391,7 @@ function mapRequest(request) {
     IS_CASH_DEPOSIT_PROPOSED: Boolean(request.IS_CASH_DEPOSIT_PROPOSED),
     PROPOSED_CASH_DEPOSIT_AMOUNT: toNumber(request.PROPOSED_CASH_DEPOSIT_AMOUNT),
     SOLD_TO: request.SOLD_TO || '',
+    SOLD_ID: request.SOLD_ID || '',
     CUSTOMER_TAX_NO: request.CUSTOMER_TAX_NO || '',
     SEARCH_TERM: request.SEARCH_TERM || '',
     EXISTING_RATING_ID: request.EXISTING_RATING_ID || '',
@@ -472,19 +473,24 @@ function formatCompanyCode(company) {
   return `${companyCode} - ${description}`;
 }
 
-async function getCompanyCode(soldTo) {
-  if (!isNonBlank(soldTo)) return '';
+async function getCompanyCode(soldTo, soldId) {
+  const accountId = isNonBlank(soldId) ? soldId.trim() : '';
+  const customerNo = isNonBlank(soldTo) ? soldTo.trim() : '';
+  if (!accountId && !customerNo) return '';
 
   const companies = await getDatabase().query(
-    `SELECT DISTINCT
-      TB3.COMP_CODE,
-      TB3.DESCRIPTION
-    FROM [MDCENTER_PRD].[dbo].[CUSTOMER] AS TB2
-    LEFT JOIN [MDCENTER_PRD].[dbo].[COMPANYMASTER] AS TB3
-      ON TB2.SALES_ORG = TB3.COMP_CODE
-    WHERE :soldTo COLLATE Thai_CI_AI = TB2.CUST_NO`,
+    `SELECT TOP (1)
+      SC.Company_Code__c AS COMP_CODE,
+      TB2.Description AS DESCRIPTION
+    FROM S_SalesforceAccount SC
+    LEFT JOIN S_CompanyMaster TB2
+      ON SC.Company_Code__c COLLATE DATABASE_DEFAULT = TB2.Comp_Code COLLATE DATABASE_DEFAULT
+    WHERE ${accountId
+    ? 'SC.Id COLLATE DATABASE_DEFAULT = :soldId COLLATE DATABASE_DEFAULT'
+    : 'SC.Sold_to_No__c COLLATE DATABASE_DEFAULT = :soldTo COLLATE DATABASE_DEFAULT'}
+    ORDER BY SC.Id`,
     {
-      replacements: { soldTo: soldTo.trim() },
+      replacements: { soldTo: customerNo, soldId: accountId },
       type: QueryTypes.SELECT,
     },
   );
@@ -543,7 +549,7 @@ async function getRequestById(id) {
 
   const response = mapRequest(request);
   response.PREVIOUS_REF_FINANCIAL_STATEMENT_FY = await findPreviousFinancialStatementYear(models.Request, request);
-  response.COMPANY_CODE = await getCompanyCode(response.SOLD_TO);
+  response.COMPANY_CODE = await getCompanyCode(response.SOLD_TO, response.SOLD_ID);
   return response;
 }
 
