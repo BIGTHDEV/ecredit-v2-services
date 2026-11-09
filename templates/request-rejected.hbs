@@ -439,6 +439,52 @@
                             </tr>
                         </table>
 
+                        <p class="section-title">Credit Adjustment</p>
+                        <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
+
+                            <tr>
+                                <td class="label">Temporary Adjustment</td>
+                                <td class="value">{{#if
+                                    suggestedCreditDetails.temporaryYes}}{{suggestedCreditDetails.validFrom}} -
+                                    {{suggestedCreditDetails.validTo}}{{else}}-{{/if}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Permanent Adjustment</td>
+                                <td class="value">{{#if
+                                    suggestedCreditDetails.permanentYes}}<span
+                                        class="status-yes">&#10003;</span>{{else}}-{{/if}}
+                                </td>
+                            </tr>
+                        </table>
+
+                        {{#if showAdditionalConditions}}
+                        <p class="section-title">Additional Conditions</p>
+                        <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
+
+                            <tr>
+                                <td class="label">Clear outstanding balance</td>
+                                <td class="value">{{#if clearOutstandingBalance}}<span
+                                        class="status-yes">&#10003;</span>{{else}}<span
+                                        class="status-no">&#10007;</span>{{/if}}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="label">Limit credit used to not exceed approved</td>
+                                <td class="value">{{#if withinApprovedLimit}}<span
+                                        class="status-yes">&#10003;</span>{{else}}<span
+                                        class="status-no">&#10007;</span>{{/if}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Bank guarantee</td>
+                                <td class="value">{{amountBank}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Cash deposit</td>
+                                <td class="value">{{amountDeposit}}</td>
+                            </tr>
+                        </table>
+                        {{/if}}
+
                         <p class="section-title">Credit Rating Scoring</p>
                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
                             style="border: 1px solid #d6e6da;">
@@ -522,40 +568,6 @@
                             <tr>
                                 <td class="label">Comment</td>
                                 <td class="value">{{{opinion}}}</td>
-                            </tr>
-                            {{#if showAdditionalConditions}}
-                            <tr>
-                                <td class="label">Clear outstanding balance</td>
-                                <td class="value">{{#if clearOutstandingBalance}}<span
-                                        class="status-yes">&#10003;</span>{{else}}<span
-                                        class="status-no">&#10007;</span>{{/if}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Limit credit used to not exceed approved</td>
-                                <td class="value">{{#if withinApprovedLimit}}<span
-                                        class="status-yes">&#10003;</span>{{else}}<span
-                                        class="status-no">&#10007;</span>{{/if}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Bank guarantee</td>
-                                <td class="value">{{amountBank}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Cash deposit</td>
-                                <td class="value">{{amountDeposit}}</td>
-                            </tr>
-                            {{/if}}
-                            <tr>
-                                <td class="label">Temporary Adjustment</td>
-                                <td class="value">{{#if
-                                    suggestedCreditDetails.temporaryYes}}{{suggestedCreditDetails.validFrom}} -
-                                    {{suggestedCreditDetails.validTo}}{{else}}-{{/if}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Permanent Adjustment</td>
-                                <td class="value">{{#if
-                                    suggestedCreditDetails.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}
-                                </td>
                             </tr>
                         </table>
 

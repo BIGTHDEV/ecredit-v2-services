@@ -265,20 +265,75 @@
     }
 
     @media screen and (max-width: 640px) {
-        body { font-size: 13px; }
-        .email-container { width: 100% !important; margin: 0 !important; border: 0 !important; border-radius: 0 !important; }
-        .brand-header td { padding: 22px 18px !important; }
-        .brand-name { font-size: 20px !important; }
-        .brand-subtitle { font-size: 13px !important; }
-        .email-content { padding: 24px 16px 20px !important; }
-        .section-title { margin-top: 22px; }
-        .info-table td { display: block; width: auto !important; padding: 8px 10px !important; }
-        .info-table .label { padding-bottom: 3px !important; border-bottom: 0 !important; }
-        .info-table .value { padding-top: 3px !important; }
-        .credit-detail-table { display: block; width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
-        .credit-detail-table th, .credit-detail-table td { min-width: 130px; padding: 9px 7px !important; word-break: break-word; }
-        .credit-movement-values td { display: block; width: auto !important; }
-        .email-footer td, .email-debug-footer td { padding: 16px 18px !important; }
+        body {
+            font-size: 13px;
+        }
+
+        .email-container {
+            width: 100% !important;
+            margin: 0 !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+        }
+
+        .brand-header td {
+            padding: 22px 18px !important;
+        }
+
+        .brand-name {
+            font-size: 20px !important;
+        }
+
+        .brand-subtitle {
+            font-size: 13px !important;
+        }
+
+        .email-content {
+            padding: 24px 16px 20px !important;
+        }
+
+        .section-title {
+            margin-top: 22px;
+        }
+
+        .info-table td {
+            display: block;
+            width: auto !important;
+            padding: 8px 10px !important;
+        }
+
+        .info-table .label {
+            padding-bottom: 3px !important;
+            border-bottom: 0 !important;
+        }
+
+        .info-table .value {
+            padding-top: 3px !important;
+        }
+
+        .credit-detail-table {
+            display: block;
+            width: 100% !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .credit-detail-table th,
+        .credit-detail-table td {
+            min-width: 130px;
+            padding: 9px 7px !important;
+            word-break: break-word;
+        }
+
+        .credit-movement-values td {
+            display: block;
+            width: auto !important;
+        }
+
+        .email-footer td,
+        .email-debug-footer td {
+            padding: 16px 18px !important;
+        }
     }
 </style>
 
@@ -298,16 +353,19 @@
                         {{#if isReminder}}
                         <p class="reminder-banner">Reminder!!</p>
                         {{/if}}
-                        <p class="intro">Please review the credit request details below and take the appropriate approval action.</p>
+                        <p class="intro">Please review the credit request details below and take the appropriate
+                            approval action.</p>
 
                         <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
                             <tr>
                                 <td class="label">No.</td>
-                                <td class="value"><a href="{{linkRequestNo}}" target="_blank" style="color: #009a49; font-weight: bold;">{{requestNo}}</a></td>
+                                <td class="value"><a href="{{linkRequestNo}}" target="_blank"
+                                        style="color: #009a49; font-weight: bold;">{{requestNo}}</a></td>
                             </tr>
                             <tr>
                                 <td class="label">CRM No.</td>
-                                <td class="value"><a href="{{linkCrmNo}}" target="_blank" style="color: #009a49; font-weight: bold;">{{crmNo}}</a></td>
+                                <td class="value"><a href="{{linkCrmNo}}" target="_blank"
+                                        style="color: #009a49; font-weight: bold;">{{crmNo}}</a></td>
                             </tr>
                             <tr>
                                 <td class="label">Request Type</td>
@@ -379,6 +437,52 @@
                                 <td>{{suggestedCreditDetails.creditRating}}</td>
                             </tr>
                         </table>
+
+                        <p class="section-title">Credit Adjustment</p>
+                        <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
+
+                            <tr>
+                                <td class="label">Temporary Adjustment</td>
+                                <td class="value">{{#if
+                                    suggestedCreditDetails.temporaryYes}}{{suggestedCreditDetails.validFrom}} -
+                                    {{suggestedCreditDetails.validTo}}{{else}}-{{/if}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Permanent Adjustment</td>
+                                <td class="value">{{#if
+                                    suggestedCreditDetails.permanentYes}}<span
+                                        class="status-yes">&#10003;</span>{{else}}-{{/if}}
+                                </td>
+                            </tr>
+                        </table>
+
+                        {{#if showAdditionalConditions}}
+                        <p class="section-title">Additional Conditions</p>
+                        <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
+
+                            <tr>
+                                <td class="label">Clear outstanding balance</td>
+                                <td class="value">{{#if clearOutstandingBalance}}<span
+                                        class="status-yes">&#10003;</span>{{else}}<span
+                                        class="status-no">&#10007;</span>{{/if}}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="label">Limit credit used to not exceed approved</td>
+                                <td class="value">{{#if withinApprovedLimit}}<span
+                                        class="status-yes">&#10003;</span>{{else}}<span
+                                        class="status-no">&#10007;</span>{{/if}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Bank guarantee</td>
+                                <td class="value">{{amountBank}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Cash deposit</td>
+                                <td class="value">{{amountDeposit}}</td>
+                            </tr>
+                        </table>
+                        {{/if}}
 
                         <p class="section-title">Credit Rating Scoring</p>
                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
@@ -463,40 +567,6 @@
                             <tr>
                                 <td class="label">Comment</td>
                                 <td class="value">{{{opinion}}}</td>
-                            </tr>
-                            {{#if showAdditionalConditions}}
-                            <tr>
-                                <td class="label">Clear outstanding balance</td>
-                                <td class="value">{{#if clearOutstandingBalance}}<span
-                                        class="status-yes">&#10003;</span>{{else}}<span
-                                        class="status-no">&#10007;</span>{{/if}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Limit credit used to not exceed approved</td>
-                                <td class="value">{{#if withinApprovedLimit}}<span
-                                        class="status-yes">&#10003;</span>{{else}}<span
-                                        class="status-no">&#10007;</span>{{/if}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Bank guarantee</td>
-                                <td class="value">{{amountBank}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Cash deposit</td>
-                                <td class="value">{{amountDeposit}}</td>
-                            </tr>
-                            {{/if}}
-                            <tr>
-                                <td class="label">Temporary Adjustment</td>
-                                <td class="value">{{#if
-                                    suggestedCreditDetails.temporaryYes}}{{suggestedCreditDetails.validFrom}} -
-                                    {{suggestedCreditDetails.validTo}}{{else}}-{{/if}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Permanent Adjustment</td>
-                                <td class="value">{{#if
-                                    suggestedCreditDetails.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}
-                                </td>
                             </tr>
                         </table>
 
@@ -604,7 +674,7 @@
                 </tr>
             </table>
             {{/if}}
-            <p style="margin: 26px 0 4px;">You can access to this request by following 
+            <p style="margin: 26px 0 4px;">You can access to this request by following
                 <a href="{{link}}" target="_blank" style="color: #009a49; font-weight: bold;">
                     Link
                 </a>
