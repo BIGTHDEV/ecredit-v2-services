@@ -48,6 +48,7 @@ function submitCommand(steps) {
     },
     scoringAndPayment: {
       SCORING_PROFITABILITY: '-',
+      SCORING_RATING_ID: '1cc1976d-fc34-4e96-9c26-06fd03adaf7a',
     },
     requestedDetails: {
       IS_TERM_REQUESTED: true,

@@ -825,7 +825,7 @@ async function submitRequest(id, command, updatedBy) {
   }
   const customerUpdate = normalizeRequestCustomerInfo(command.customerInfo ?? {});
   const creditUpdate = normalizeRequestCreditSuggestion(command.creditSuggestion ?? {});
-  const scoringUpdate = normalizeRequestScoringAndPayment(command.scoringAndPayment ?? {});
+  const scoringUpdate = normalizeRequestScoringAndPayment(command.scoringAndPayment ?? {}, { requireRating: true });
   const requestedUpdate = normalizeRequestRequestedDetails(command.requestedDetails ?? {});
   const normalizedSteps = normalizeSubmitSteps(command.steps ?? []);
   const approvalValues = { ...creditUpdate };
@@ -1363,7 +1363,10 @@ function deriveScoringRating(scores) {
   return SCORING_RATING_IDS.A;
 }
 
-function normalizeRequestScoringAndPayment(payload) {
+function normalizeRequestScoringAndPayment(payload, {
+  allowIncompleteScoring = false,
+  requireRating = false,
+} = {}) {
   const scoringFields = [
     'SCORING_PROFITABILITY', 'SCORING_GROWTH', 'SCORING_LIQUIDITY', 'SCORING_LEVERAGE',
   ];
@@ -1399,13 +1402,25 @@ function normalizeRequestScoringAndPayment(payload) {
       ? '' : String(update.SCORING_NOTES).trim();
   }
   const scoringNotesText = String(update.SCORING_NOTES || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-  if ((update.IS_SCORING_OTHER || update.IS_SCORING_NA) && !scoringNotesText) {
+  if (!allowIncompleteScoring && (update.IS_SCORING_OTHER || update.IS_SCORING_NA) && !scoringNotesText) {
     throw validationError('SCORING_NOTES is required when Others or N/A is selected.');
+  }
+
+  const requestedRatingId = String(update.SCORING_RATING_ID || '').trim();
+  const hasScoringInput = scoringFields.some((field) => Object.prototype.hasOwnProperty.call(update, field));
+  const hasScoringValue = scoringFields.some((field) => {
+    const value = update[field];
+    return value !== undefined && value !== null && String(value).trim() !== '' && String(value).trim() !== '-';
+  });
+  if (requireRating && !requestedRatingId) {
+    throw validationError('SCORING_RATING_ID is required when submitting a request.');
   }
 
   if (activeCategories.length) {
     scoringFields.forEach((field) => { update[field] = '0'; });
     update.SCORING_RATING_ID = update.IS_SCORING_NA ? SCORING_RATING_IDS.NA : SCORING_RATING_IDS.NO_RISK;
+  } else if (allowIncompleteScoring && hasScoringInput && !requestedRatingId && !hasScoringValue) {
+    update.SCORING_RATING_ID = '';
   } else {
     update.SCORING_RATING_ID = deriveScoringRating(scoringFields.map((field) => update[field]));
   }
@@ -1440,10 +1455,12 @@ function normalizeRequestScoringAndPayment(payload) {
 
 async function updateRequestScoringAndPayment(id, payload, updatedBy) {
   const { Request, Rating } = getModels();
-  const update = normalizeRequestScoringAndPayment(payload);
   const request = await Request.findOne({ where: { ID: id, ENABLED: true } });
 
   if (!request) return null;
+  const update = normalizeRequestScoringAndPayment(payload, {
+    allowIncompleteScoring: request.STATUS_ID === DRAFT_STATUS_ID,
+  });
   if (update.SCORING_RATING_ID) {
     const rating = await Rating.findOne({ where: { ID: update.SCORING_RATING_ID, ENABLED: '1' } });
     if (!rating) throw validationError('SCORING_RATING_ID must reference an enabled rating.');
