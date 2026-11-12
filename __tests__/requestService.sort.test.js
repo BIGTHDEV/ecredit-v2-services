@@ -90,6 +90,34 @@ describe('requestService.listRequests sorting', () => {
     expect(findAndCountAll.mock.calls[0][0].include).toContainEqual({ model: Status, as: 'sapStatus', required: false });
   });
 
+  it('returns existing credit values from their existing request fields', async () => {
+    const rows = [{
+      ID: 'existing-values',
+      EXISTING_RATING_ID: 'rating-existing',
+      EXISTING_TERM_ID: 'term-existing',
+      EXISTING_LIMIT_AMOUNT: '350000.00',
+      existingRating: { NAME: 'BB (Medium)' },
+    }, {
+      ID: 'empty-existing-values',
+      EXISTING_TERM_ID: null,
+      EXISTING_LIMIT_AMOUNT: null,
+    }];
+    const findAndCountAll = jest.fn().mockResolvedValue({ rows, count: rows.length });
+    getModels.mockReturnValue({ Request: { findAndCountAll }, Rating: {}, Term: {}, Status: {}, Employee: {} });
+
+    const result = await requestService.listRequests({});
+
+    expect(result.items[0]).toEqual(expect.objectContaining({
+      EXISTING_RATING: 'BB (Medium)',
+      EXISTING_TERM_ID: 'term-existing',
+      EXISTING_LIMIT_AMOUNT: 350000,
+    }));
+    expect(result.items[1]).toEqual(expect.objectContaining({
+      EXISTING_TERM_ID: '',
+      EXISTING_LIMIT_AMOUNT: null,
+    }));
+  });
+
   it('returns Yes only when BDS notes contain visible text', async () => {
     const rows = [
       { ID: 'with-notes', BDS_NOTES: '<p>Follow up with customer</p>' },

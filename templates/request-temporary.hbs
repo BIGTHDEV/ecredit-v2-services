@@ -1,0 +1,489 @@
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        background: #eef3f1;
+        color: #17212b;
+        font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    table {
+        border-collapse: collapse;
+    }
+
+    .email-shell {
+        width: 100%;
+        background: #eef3f1;
+    }
+
+    .email-container {
+        width: 80%;
+        margin: 24px auto;
+        background: #ffffff;
+        border: 1px solid #dce8e1;
+        border-radius: 14px;
+        box-shadow: 0 8px 24px rgba(23, 58, 43, 0.08);
+        overflow: hidden;
+    }
+
+    .brand-header {
+        background: #075c3d;
+        color: #ffffff;
+    }
+
+    .brand-header td {
+        padding: 30px 36px;
+        border-bottom: 4px solid #f39c12;
+    }
+
+    .brand-name {
+        margin: 0;
+        color: #ffffff;
+        font-size: 23px;
+        letter-spacing: 0.2px;
+        font-weight: bold;
+        line-height: 1.2;
+    }
+
+    .brand-subtitle {
+        margin: 6px 0 0;
+        color: #d9f2e4;
+        font-size: 14px;
+    }
+
+    .email-content {
+        padding: 34px 36px 28px;
+    }
+
+    .greeting {
+        margin: 0 0 10px;
+        font-size: 16px;
+        font-weight: bold;
+    }
+
+    .reminder-banner {
+        margin: 0 0 18px;
+        color: red;
+        font-family: Verdana, sans-serif;
+        font-size: 20pt;
+        font-weight: bolder;
+    }
+
+    .intro {
+        margin: 0 0 26px;
+        color: #52665d;
+        font-size: 14px;
+    }
+
+    .section-title {
+        margin: 28px 0 10px;
+        color: #075c3d;
+        font-size: 15px;
+        letter-spacing: 0.3px;
+        font-weight: bold;
+    }
+
+    .info-table {
+        width: 100%;
+        border: 1px solid #dce8e1;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .info-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e6efea;
+        vertical-align: top;
+    }
+
+    .info-table tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .info-table .label {
+        width: 260px;
+        background: #f1f7f3;
+        color: #315445;
+        font-weight: bold;
+    }
+
+    .info-table .value {
+        color: #17212b;
+        word-break: break-word;
+    }
+
+    .rating-score {
+        color: #009a49;
+        font-size: 18px;
+        font-weight: bold;
+    }
+
+    .credit-detail-table {
+        width: 100%;
+        border: 1px solid #dce8e1;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .credit-detail-table th {
+        padding: 10px 8px;
+        background: #075c3d;
+        border: 1px solid #28785a;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: bold;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    .credit-detail-table td {
+        padding: 11px 8px;
+        border: 1px solid #e0ebe5;
+        text-align: center;
+        vertical-align: top;
+    }
+
+    .credit-detail-table td:first-child {
+        background: #f1f7f3;
+        color: #315445;
+        font-weight: bold;
+        text-align: left;
+    }
+
+    .credit-detail-table .current-step-row td {
+        background: #fff4d9;
+        font-weight: bold;
+    }
+
+    .status-yes {
+        color: #009a49;
+        font-size: 18px;
+        font-weight: bold;
+    }
+
+    .status-no {
+        color: #c0392b;
+        font-size: 18px;
+        font-weight: bold;
+    }
+
+    .credit-movement {
+        width: 100%;
+        margin: 0 0 12px;
+        border: 1px solid #d6e6da;
+    }
+
+    .credit-movement:last-child {
+        margin-bottom: 0;
+    }
+
+    .credit-movement-header td {
+        padding: 10px 12px;
+        background: #edf7f1;
+        color: #284534;
+        font-weight: bold;
+    }
+
+    .credit-movement-status {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #e3f6ec;
+        color: #009a49;
+        font-size: 12px;
+    }
+
+    .credit-movement-meta td {
+        padding: 8px 12px;
+        border-top: 1px solid #d6e6da;
+        color: #667784;
+        font-size: 12px;
+    }
+
+    .credit-movement-comment td {
+        padding: 8px 12px;
+        border-top: 1px solid #d6e6da;
+        color: #17212b;
+    }
+
+    .credit-movement-comment span {
+        display: block;
+        color: #667784;
+        font-size: 12px;
+    }
+
+    .credit-movement-values td {
+        width: 33.33%;
+        padding: 10px 12px;
+        border-top: 1px solid #d6e6da;
+        vertical-align: top;
+    }
+
+    .credit-movement-values span {
+        display: block;
+        color: #667784;
+        font-size: 12px;
+    }
+
+    .credit-movement-values strong {
+        display: block;
+        margin-top: 3px;
+        color: #17212b;
+        font-size: 14px;
+    }
+
+    .conditions-table td {
+        border: 0 !important;
+    }
+
+    .button-note {
+        margin: 8px 0 0;
+        color: #667784;
+        font-size: 12px;
+    }
+
+    .email-footer td {
+        padding: 18px 36px;
+        background: #f1f6f3;
+        color: #60766b;
+        font-size: 12px;
+    }
+
+    .email-debug-footer td {
+        padding: 16px 36px;
+        background: #f39c12;
+        color: #3d2500;
+        font-size: 12px;
+    }
+
+    .email-debug-footer strong {
+        color: #241500;
+    }
+
+    @media screen and (max-width: 640px) {
+        body {
+            font-size: 13px;
+        }
+
+        .email-container {
+            width: 100% !important;
+            margin: 0 !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+        }
+
+        .brand-header td {
+            padding: 22px 18px !important;
+        }
+
+        .brand-name {
+            font-size: 20px !important;
+        }
+
+        .brand-subtitle {
+            font-size: 13px !important;
+        }
+
+        .email-content {
+            padding: 24px 16px 20px !important;
+        }
+
+        .section-title {
+            margin-top: 22px;
+        }
+
+        .info-table td {
+            display: block;
+            width: auto !important;
+            padding: 8px 10px !important;
+        }
+
+        .info-table .label {
+            padding-bottom: 3px !important;
+            border-bottom: 0 !important;
+        }
+
+        .info-table .value {
+            padding-top: 3px !important;
+        }
+
+        .credit-detail-table {
+            display: block;
+            width: 100% !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .credit-detail-table th,
+        .credit-detail-table td {
+            min-width: 130px;
+            padding: 9px 7px !important;
+            word-break: break-word;
+        }
+
+        .credit-movement-values td {
+            display: block;
+            width: auto !important;
+        }
+
+        .email-footer td,
+        .email-debug-footer td {
+            padding: 16px 18px !important;
+        }
+    }
+</style>
+
+<table class="email-shell" role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+    <tr>
+        <td align="center">
+            <table class="email-container" role="presentation" width="80%" cellspacing="0" cellpadding="0" border="0">
+                <tr class="brand-header">
+                    <td>
+                        <p class="brand-name">e-Credit System</p>
+                        <p class="brand-subtitle">Credit adjustment expiry reminder</p>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="email-content">
+                        <p class="greeting">Dear {{dear}},</p>
+                        {{#if isReminder}}
+                        <p class="reminder-banner">Reminder!!</p>
+                        {{/if}}
+                        <p class="intro">This is a reminder that an approved credit adjustment is approaching its
+                            expiry date. Please review the adjustment details below and take any action needed before
+                            the expiry date.</p>
+
+                        <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                            <tr>
+                                <td class="label">No.</td>
+                                <td class="value"><a href="{{linkRequestNo}}" target="_blank"
+                                        style="color: #009a49; font-weight: bold;">{{requestNo}}</a></td>
+                            </tr>
+                            <tr>
+                                <td class="label">CRM No.</td>
+                                <td class="value"><a href="{{linkCrmNo}}" target="_blank"
+                                        style="color: #009a49; font-weight: bold;">{{crmNo}}</a></td>
+                            </tr>
+                            <tr>
+                                <td class="label">Request Type</td>
+                                <td class="value">{{requestType}}</td>
+                            </tr>
+                        </table>
+
+                        <p class="section-title">Customer Information</p>
+                        <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                            <tr>
+                                <td class="label">Company Name</td>
+                                <td class="value">{{companyName}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Sold To No.</td>
+                                <td class="value">{{soldToNo}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Sales Group</td>
+                                <td class="value">{{salesGroup}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Business Type (Sold-To Industry)</td>
+                                <td class="value">{{businessType}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Customer Type (External)</td>
+                                <td class="value">{{customerType}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Company Register Date</td>
+                                <td class="value">{{companyRegisterDate}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Registered Capital (THB)</td>
+                                <td class="value">{{registeredCapital}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Company Size</td>
+                                <td class="value">{{companySize}}</td>
+                            </tr>
+                        </table>
+
+                        <p class="section-title">Credit Proposal Summary</p>
+                        <table class="credit-detail-table" role="presentation" width="100%" cellspacing="0"
+                            cellpadding="0">
+                            <tr>
+                                <th>Detail</th>
+                                <th>Existing</th>
+                                <th>New Proposed by BAE</th>
+                                <th>Suggested By Credit Team</th>
+                                <th>Final Confirmed</th>
+                            </tr>
+                            <tr>
+                                <td>Credit Term</td>
+                                <td>{{creditTermExisting}}</td>
+                                <td>{{creditTermProposed}}</td>
+                                <td>{{suggestedCreditDetails.creditTerm}}</td>
+                                <td>{{finalConfirmedDetails.creditTerm}}</td>
+                            </tr>
+                            <tr>
+                                <td>Credit Limit (THB)</td>
+                                <td>{{creditLimitExisting}}</td>
+                                <td>{{creditLimitProposed}}</td>
+                                <td>{{suggestedCreditDetails.creditLimit}}</td>
+                                <td>{{finalConfirmedDetails.creditLimit}}</td>
+                            </tr>
+                            <tr>
+                                <td>Credit Rating</td>
+                                <td>{{creditRatingExisting}}</td>
+                                <td>-</td>
+                                <td>{{suggestedCreditDetails.creditRating}}</td>
+                                <td>{{finalConfirmedDetails.creditRating}}</td>
+                            </tr>
+                        </table>
+
+                        <p class="section-title">Credit Adjustment</p>
+                        <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
+
+                            <tr>
+                                <td class="label">Temporary Adjustment</td>
+                                <td class="value">{{#if
+                                    suggestedCreditDetails.temporaryYes}}{{suggestedCreditDetails.validFrom}} -
+                                    {{suggestedCreditDetails.validTo}}{{else}}-{{/if}}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Permanent Adjustment</td>
+                                <td class="value">{{#if
+                                    suggestedCreditDetails.permanentYes}}<span
+                                        class="status-yes">&#10003;</span>{{else}}-{{/if}}
+                                </td>
+                            </tr>
+                        </table>
+
+                        <p style="margin: 26px 0 4px;">You can access to this request by following
+                            <a href="{{link}}" target="_blank" style="color: #009a49; font-weight: bold;">
+                                Link
+                            </a>
+                        </p>
+                    </td>
+                </tr>
+                <tr class="email-footer">
+                    <td>This is an automated credit adjustment expiry reminder from e-Credit System.</td>
+                </tr>
+                {{#if showEmailDebugInfo}}
+                <tr class="email-debug-footer">
+                    <td>
+                        <strong>Show for testing only.</strong><br>
+                        <strong>Subject:</strong> {{emailDebugInfo.subject}}<br>
+                        <strong>To:</strong> {{#each emailDebugInfo.to}}{{#unless @first}},
+                        {{/unless}}{{this}}{{else}}-{{/each}}<br>
+                        <strong>CC:</strong> {{#each emailDebugInfo.cc}}{{#unless @first}},
+                        {{/unless}}{{this}}{{else}}-{{/each}}
+                    </td>
+                </tr>
+                {{/if}}
+            </table>
+        </td>
+    </tr>
+</table>

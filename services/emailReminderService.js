@@ -5,26 +5,47 @@ const logger = require('../config/logger');
 const { getDatabase } = require('../config/database');
 const { getModels } = require('../models');
 const { parseDescription } = require('./emailLogService');
-const { TEMPLATES, listSettings, intervalMilliseconds } = require('./emailReminderConfigService');
+const {
+  TEMPORARY_TEMPLATE, TEMPLATES, listSettings, intervalMilliseconds, storedDaysOfWeek, validateSettings,
+} = require('./emailReminderConfigService');
 const { sendEmail, resolveRecipients } = require('./emailService');
 const { getRequestEmailModel } = require('./requestEmailModelService');
 const { listApprovalHistory } = require('./requestService');
-const { pendingApprovers, approvalActionsFor } = require('./requestWorkflowNotificationService');
+const {
+  pendingApprovers, approvalActionsFor, getTemporaryReminderRecipients,
+} = require('./requestWorkflowNotificationService');
 const { verifyEmailApprovalToken } = require('./emailApprovalActionService');
 const maintenanceService = require('./maintenanceService');
 
 const DRAFT_STATUS_ID = 'db8b3768-8466-4974-8dff-4c374b16a639';
 const WAITING_STATUS_ID = '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b';
 const FINAL_STATUS_ID = '014e8e8b-42cf-4b2f-8cae-e395e26efbcd';
+const COMPLETED_STATUS_ID = '407e23f9-caf5-4c4a-801d-598cf437d1ae';
 const APPROVED_TYPE_ID = 'aab5ce03-1c54-48c8-8305-6b1a017b43fd';
 const BACKWARD_TYPE_ID = 'b76065cc-6507-458d-94ce-87231cbaa57c';
+const DAY_MS = 24 * 60 * 60 * 1000;
 const POLL_INTERVAL_MS = 60000;
 const PAGE_SIZE = 200;
+const DATABASE_CLOCK_QUERY = `SELECT GETDATE() AS NOW,
+  ((DATEDIFF(DAY, CONVERT(DATETIME, '19000107', 112), GETDATE()) % 7 + 7) % 7) AS DAY_OF_WEEK`;
+
+async function databaseClock(database, transaction) {
+  const options = { type: QueryTypes.SELECT, ...(transaction ? { transaction } : {}) };
+  const [clock] = await database.query(DATABASE_CLOCK_QUERY, options);
+  if (!clock || !Number.isInteger(clock.DAY_OF_WEEK) || clock.DAY_OF_WEEK < 0 || clock.DAY_OF_WEEK > 6) {
+    throw new Error('Reminder scheduler received an invalid database weekday.');
+  }
+  return clock;
+}
 
 function timestamp(value) {
   const result = value == null ? NaN : new Date(value).getTime();
   if (!Number.isFinite(result)) throw new Error('Reminder source contains a missing or invalid date.');
   return result;
+}
+
+function isEnabled(value) {
+  return value === true || value === 1 || value === '1' || value === 'true';
 }
 
 function approvalIdFromLog(source, parameters) {
@@ -46,15 +67,29 @@ function reminderKey(source, template, approvalId) {
   ])).digest('hex');
 }
 
-async function getEligibility(source, template, approvalId, transaction) {
+async function getEligibility(source, template, approvalId, transaction, daysBeforeExpiry) {
   const { Request, Approval } = getModels();
   const request = await Request.findOne({ where: { ID: source.REQUEST_ID, ENABLED: true }, transaction });
   if (!request) return null;
   const expectedStatus = template === 'request-approval' ? WAITING_STATUS_ID
-    : template === 'request-final' ? FINAL_STATUS_ID : DRAFT_STATUS_ID;
+    : template === 'request-final' ? FINAL_STATUS_ID
+      : template === TEMPORARY_TEMPLATE ? COMPLETED_STATUS_ID : DRAFT_STATUS_ID;
   if (String(request.STATUS_ID).toLowerCase() !== expectedStatus) return null;
 
   if (template === 'request-draft') return { anchor: timestamp(request.UPDATED_DATE) };
+  if (template === TEMPORARY_TEMPLATE) {
+    if (!isEnabled(request.IS_TEMPORARY_APPROVED) && !isEnabled(request.IS_PERMANENT_APPROVED)) return null;
+    if (!Number.isInteger(daysBeforeExpiry) || daysBeforeExpiry < 1 || daysBeforeExpiry > 365) {
+      throw new Error('Temporary reminder has an invalid days-before-expiry setting.');
+    }
+    const effectiveAt = timestamp(request.APPROVED_VALID_FROM);
+    const expiresAt = timestamp(request.APPROVED_VALID_TO);
+    if (effectiveAt >= expiresAt) throw new Error('Temporary adjustment has an invalid Effective/Expiry date range.');
+    return {
+      anchor: Math.max(effectiveAt, expiresAt - daysBeforeExpiry * DAY_MS),
+      expiresAt,
+    };
+  }
 
   const approvals = await Approval.findAll({ where: { REQUEST_ID: source.REQUEST_ID }, transaction });
   const cycle = approvals.filter((approval) => !request.SUBMITTED_DATE
@@ -78,16 +113,31 @@ async function getEligibility(source, template, approvalId, transaction) {
 }
 
 function isDue(eligibility, state, settings, now) {
+  const nowAt = timestamp(now);
+  if (eligibility.expiresAt !== undefined) {
+    if (nowAt < eligibility.anchor || nowAt >= eligibility.expiresAt) return false;
+    const lastActivity = Math.max(
+      state?.LAST_SENT_DATE ? timestamp(state.LAST_SENT_DATE) : 0,
+      state?.LAST_ATTEMPT_DATE ? timestamp(state.LAST_ATTEMPT_DATE) : 0,
+    );
+    return lastActivity === 0 || nowAt - lastActivity >= intervalMilliseconds(settings);
+  }
   const baseline = Math.max(
     eligibility.anchor,
     state?.LAST_SENT_DATE ? timestamp(state.LAST_SENT_DATE) : 0,
     state?.LAST_ATTEMPT_DATE ? timestamp(state.LAST_ATTEMPT_DATE) : 0,
   );
-  return timestamp(now) - baseline >= intervalMilliseconds(settings);
+  return nowAt - baseline >= intervalMilliseconds(settings);
+}
+
+function isScheduledOnDay(settings, weekday) {
+  return storedDaysOfWeek(settings.DAYS_OF_WEEK).includes(weekday);
 }
 
 function findSourceEmails(Email, templates, offset) {
-  const categories = templates.flatMap((template) => [template, `${template}.hbs`]);
+  const categories = templates.flatMap((template) => template === TEMPORARY_TEMPLATE
+    ? ['request-completed', 'request-completed.hbs']
+    : [template, `${template}.hbs`]);
   if (templates.includes('request-draft')) categories.push('api.crm.email');
   return Email.findAll({
     where: {
@@ -105,7 +155,7 @@ function findSourceEmails(Email, templates, offset) {
           WHERE CONVERT(VARCHAR(128), REMINDER_REQUEST.ID) COLLATE DATABASE_DEFAULT
             = CONVERT(VARCHAR(128), [Email].[REQUEST_ID]) COLLATE DATABASE_DEFAULT
             AND REMINDER_REQUEST.ENABLED = 1
-            AND REMINDER_REQUEST.STATUS_ID IN ('${DRAFT_STATUS_ID}', '${WAITING_STATUS_ID}', '${FINAL_STATUS_ID}')
+            AND REMINDER_REQUEST.STATUS_ID IN ('${DRAFT_STATUS_ID}', '${WAITING_STATUS_ID}', '${FINAL_STATUS_ID}', '${COMPLETED_STATUS_ID}')
         )
         AND (
           [Email].[CATEGORY] NOT IN ('request-draft', 'request-draft.hbs', 'api.crm.email')
@@ -144,16 +194,18 @@ async function previewReminderRequests(template, input) {
     error.code = 'VALIDATION_ERROR';
     throw error;
   }
+  const validated = validateSettings({ ...input, enabled: true }, template);
   const interval = {
-    INTERVAL_VALUE: input?.intervalValue,
-    INTERVAL_UNIT: input?.intervalUnit,
+    INTERVAL_VALUE: validated.INTERVAL_VALUE,
+    INTERVAL_UNIT: validated.INTERVAL_UNIT,
     ENABLED: true,
+    DAYS_OF_WEEK: validated.DAYS_OF_WEEK,
   };
   intervalMilliseconds(interval);
 
   const { Email, EmailReminderState } = getModels();
   const database = getDatabase();
-  const [{ NOW: now }] = await database.query('SELECT GETDATE() AS NOW', { type: QueryTypes.SELECT });
+  const { NOW: now, DAY_OF_WEEK: weekday } = await databaseClock(database);
   const requests = [];
   const seen = new Set();
   let skippedCount = 0;
@@ -173,10 +225,11 @@ async function previewReminderRequests(template, input) {
         if (seen.has(key)) continue;
         seen.add(key);
 
-        const eligibility = await getEligibility(source, template, approvalId);
+        const eligibility = await getEligibility(source, template, approvalId, undefined, validated.DAYS_BEFORE_EXPIRY);
         if (!eligibility) continue;
         const state = await EmailReminderState.findByPk(key);
-        if (!isDue(eligibility, state, interval, now)) continue;
+        if (!isScheduledOnDay(interval, weekday) || !isDue(eligibility, state, interval, now)) continue;
+        if (template === TEMPORARY_TEMPLATE) await getTemporaryReminderRecipients(source.REQUEST_ID);
 
         const model = await getRequestEmailModel(source.REQUEST_ID, parameters.model?.dear || 'All');
         requests.push({
@@ -185,6 +238,7 @@ async function previewReminderRequests(template, input) {
           companyName: model.companyName,
           requestLink: model.link,
           approverName: eligibility.approver?.APPROVER_NAME || null,
+          ...(template === TEMPORARY_TEMPLATE ? { expiryDate: model.finalConfirmedDetails.validTo } : {}),
         });
       } catch (error) {
         skippedCount += 1;
@@ -220,11 +274,13 @@ async function processReminder(source, template, approvalId, parameters, key) {
 
     const settings = await EmailReminderConfig.findOne({ where: { TEMPLATE: template, ENABLED: true }, transaction });
     if (!settings) return;
-    const eligibility = await getEligibility(source, template, approvalId, transaction);
+    const eligibility = await getEligibility(
+      source, template, approvalId, transaction, settings.DAYS_BEFORE_EXPIRY,
+    );
     if (!eligibility) return;
     let state = await EmailReminderState.findByPk(key, { transaction });
-    const [{ NOW: now }] = await database.query('SELECT GETDATE() AS NOW', { type: QueryTypes.SELECT, transaction });
-    if (!isDue(eligibility, state, settings, now)) return;
+    const { NOW: now, DAY_OF_WEEK: weekday } = await databaseClock(database, transaction);
+    if (!isScheduledOnDay(settings, weekday) || !isDue(eligibility, state, settings, now)) return;
 
     if (!state) {
       const databaseNow = literal('GETDATE()');
@@ -239,16 +295,24 @@ async function processReminder(source, template, approvalId, parameters, key) {
     let sent = false;
     try {
       const isProduction = config.environment === 'prd';
-      const recipients = resolveRecipients(config.environment, parameters.recipients, parameters.recipients?.to);
-      const testerEmail = isProduction ? undefined : recipients.to[0];
+      const sourceRecipients = template === TEMPORARY_TEMPLATE && isProduction
+        ? null
+        : resolveRecipients(config.environment, parameters.recipients, parameters.recipients?.to);
+      const testerEmail = isProduction ? undefined : sourceRecipients.to[0];
+      const intendedRecipients = template === TEMPORARY_TEMPLATE
+        ? await getTemporaryReminderRecipients(source.REQUEST_ID, { transaction })
+        : sourceRecipients;
       const model = await getRequestEmailModel(source.REQUEST_ID, parameters.model?.dear || 'All', { transaction });
       if (eligibility.approver) model.approvalActions = approvalActionsFor(source.REQUEST_ID, [eligibility.approver]);
       await sendEmail({
         template,
-        subject: parameters.baseSubject,
+        subject: template === TEMPORARY_TEMPLATE
+          ? `Credit adjustment expiry reminder ${model.companyName} (${model.requestNo})`
+          : parameters.baseSubject,
         model,
-        recipients,
-        effectiveRecipients: recipients,
+        recipients: intendedRecipients,
+        ...(template === TEMPORARY_TEMPLATE ? { intendedRecipients } : {}),
+        effectiveRecipients: intendedRecipients,
         actorEmail: testerEmail,
         requestId: source.REQUEST_ID,
         auditActorCode: 0,
@@ -291,7 +355,8 @@ async function runEmailReminders(shouldStop = () => false) {
         const payload = parseDescription(source.DESCRIPTION);
         const parameters = payload.sendParameters;
         if (!parameters) throw new Error('Original email has no stored send parameters; reminder was not sent.');
-        const template = (source.CATEGORY === 'api.crm.email' ? payload.template : source.CATEGORY).replace(/\.hbs$/i, '');
+        const sourceTemplate = (source.CATEGORY === 'api.crm.email' ? payload.template : source.CATEGORY).replace(/\.hbs$/i, '');
+        const template = sourceTemplate === 'request-completed' ? TEMPORARY_TEMPLATE : sourceTemplate;
         if (parameters.environment !== config.environment) continue;
         const approvalId = template === 'request-approval' ? approvalIdFromLog(source, parameters) : undefined;
         const key = reminderKey(source, template, approvalId);
@@ -332,6 +397,7 @@ module.exports = {
   reminderKey,
   getEligibility,
   isDue,
+  isScheduledOnDay,
   previewReminderRequests,
   processReminder,
   runEmailReminders,

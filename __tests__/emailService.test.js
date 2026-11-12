@@ -215,6 +215,32 @@ describe('emailService', () => {
     }));
   });
 
+  test('keeps Temporary reminder intended recipients in testing context without delivering to them', async () => {
+    const transporter = createTransporter();
+    await createEmailService({ environment: 'qas', transporter }).sendEmail({
+      template: 'request-temporary',
+      subject: 'Credit adjustment expiry reminder',
+      model,
+      recipients: { to: ['requester@example.com'], cc: ['super@example.com'] },
+      intendedRecipients: { to: ['requester@example.com'], cc: ['super@example.com'] },
+      actorEmail: 'tester@example.com',
+      reminderContext: { automatic: true },
+    });
+
+    expect(transporter.sendMail.mock.calls[0][0]).toEqual(expect.objectContaining({
+      to: ['tester@example.com'],
+      cc: [],
+      context: expect.objectContaining({
+        showEmailDebugInfo: true,
+        isReminder: true,
+        emailDebugInfo: expect.objectContaining({
+          to: ['requester@example.com'],
+          cc: ['super@example.com'],
+        }),
+      }),
+    }));
+  });
+
   test.each(['dev', 'qas'])('sends only to Main User and configured BCC in %s even when resend recipients are supplied', async (environment) => {
     const transporter = createTransporter();
     await createEmailService({ environment, transporter }).sendEmail({

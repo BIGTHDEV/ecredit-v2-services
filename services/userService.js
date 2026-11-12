@@ -27,15 +27,62 @@ function normalizePage(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function employeeIdentityFilter(value, association = '') {
+function employeeIdentityFilter(value) {
+  const separator = value.indexOf('-');
+  if (separator > 0 && separator < value.length - 1) {
+    const initials = value.slice(0, separator).trim();
+    const username = value.slice(separator + 1).trim();
+    if (initials && username) {
+      return {
+        [Op.and]: [
+          { INITIALS: { [Op.like]: `%${initials}%` } },
+          { USERNAME: { [Op.like]: `%${username}%` } },
+        ],
+      };
+    }
+  }
+
   const pattern = `%${value.trim()}%`;
-  const initials = association
-    ? { [`$${association}.INITIALS$`]: { [Op.like]: pattern } }
-    : { INITIALS: { [Op.like]: pattern } };
-  const username = association
-    ? { [`$${association}.USERNAME$`]: { [Op.like]: pattern } }
-    : { USERNAME: { [Op.like]: pattern } };
-  return { [Op.or]: [initials, username] };
+  return {
+    [Op.or]: [
+      { INITIALS: { [Op.like]: pattern } },
+      { USERNAME: { [Op.like]: pattern } },
+    ],
+  };
+}
+
+function buildAssociatedTextWhere(query, fields) {
+  const where = {};
+  for (const [key, column] of Object.entries(fields)) {
+    const value = query[key]?.trim();
+    if (value) where[column] = { [Op.like]: `%${value}%` };
+  }
+  return Object.keys(where).length ? where : undefined;
+}
+
+function buildUserWhere(query) {
+  const filters = [];
+  const systemActive = String(query.SYSTEM_ACTIVE || '').trim().toLowerCase();
+  if (['1', 'true', 'active'].includes(systemActive)) {
+    filters.push({ ENABLED: { [Op.in]: ['1', 1, true] } });
+  } else if (['0', 'false', 'inactive'].includes(systemActive)) {
+    filters.push({ ENABLED: { [Op.in]: ['0', 0, false] } });
+  }
+
+  const updatedDate = query.UPDATED_DATE?.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(updatedDate || '')) {
+    const start = new Date(`${updatedDate}T00:00:00.000Z`);
+    if (!Number.isNaN(start.getTime())) {
+      filters.push({
+        UPDATED_DATE: {
+          [Op.gte]: start,
+          [Op.lt]: new Date(start.getTime() + 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+  }
+
+  return filters.length ? { [Op.and]: filters } : undefined;
 }
 
 function buildWhere(query) {
@@ -54,24 +101,6 @@ function buildWhere(query) {
 
   const user = query.USER?.trim();
   if (user) filters.push(employeeIdentityFilter(user));
-
-  for (const [key, association] of [['MANAGER_1', 'manager1'], ['MANAGER_2', 'manager2']]) {
-    const value = query[key]?.trim();
-    if (value) filters.push(employeeIdentityFilter(value, association));
-  }
-
-  const updatedBy = query.UPDATED_BY?.trim();
-  if (updatedBy) {
-    filters.push(employeeIdentityFilter(updatedBy, 'user.updatedByEmployee'));
-  }
-
-  const updatedDate = query.UPDATED_DATE?.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(updatedDate || '')) {
-    const start = new Date(`${updatedDate}T00:00:00.000Z`);
-    if (!Number.isNaN(start.getTime())) {
-      filters.push({ '$user.UPDATED_DATE$': { [Op.gte]: start, [Op.lt]: new Date(start.getTime() + 24 * 60 * 60 * 1000) } });
-    }
-  }
 
   const presenceStatus = String(query.PRESENCE_STATUS || '').trim().toUpperCase();
   if (presenceStatus === 'ACTIVE' || presenceStatus === 'AWAY') {
@@ -203,16 +232,72 @@ async function listUsers(query) {
   const { Employee, User, CostCenterMapping, UserRole, Role } = models;
   const page = normalizePage(query.page, 1);
   const pageSize = Math.min(normalizePage(query.pageSize, 25), 100);
+  const updatedBy = query.UPDATED_BY?.trim();
+  const manager1 = query.MANAGER_1?.trim();
+  const manager2 = query.MANAGER_2?.trim();
+  const roleFilter = query.ROLES?.trim();
+  const userInclude = {
+    model: User,
+    as: 'user',
+    required: true,
+    where: buildUserWhere(query),
+    include: [
+      {
+        model: CostCenterMapping,
+        as: 'costCenter',
+        required: !!(query.COST_CENTER_DESC?.trim() || query.BU?.trim() || query.DEPARTMENT?.trim()),
+        where: buildAssociatedTextWhere(query, {
+          COST_CENTER_DESC: 'COST_CENTER_DESC',
+          BU: 'BU',
+          DEPARTMENT: 'DEPARTMENT',
+        }),
+      },
+      {
+        model: UserRole,
+        as: 'userRoles',
+        required: false,
+        include: [{ model: Role, as: 'role', required: false }],
+      },
+      {
+        model: Employee,
+        as: 'updatedByEmployee',
+        required: !!updatedBy,
+        where: updatedBy ? employeeIdentityFilter(updatedBy) : undefined,
+        attributes: ['EMP_CODE', 'INITIALS', 'USERNAME'],
+      },
+    ],
+  };
+  if (roleFilter) {
+    userInclude.include.push({
+      model: UserRole,
+      as: 'userRolesFilter',
+      required: true,
+      where: { ENABLED: { [Op.in]: ['1', 1, true] } },
+      include: [{
+        model: Role,
+        as: 'role',
+        required: true,
+        where: { NAME: { [Op.like]: `%${roleFilter}%` } },
+      }],
+    });
+  }
+
   const result = await Employee.findAndCountAll({
     where: buildWhere(query),
     include: [
-      { model: User, as: 'user', required: true, include: [
-        { model: CostCenterMapping, as: 'costCenter', required: false },
-        { model: UserRole, as: 'userRoles', required: false, include: [{ model: Role, as: 'role', required: false }] },
-        { model: Employee, as: 'updatedByEmployee', required: false, attributes: ['EMP_CODE', 'INITIALS', 'USERNAME'] },
-      ] },
-      { model: Employee, as: 'manager1', required: false },
-      { model: Employee, as: 'manager2', required: false },
+      userInclude,
+      {
+        model: Employee,
+        as: 'manager1',
+        required: !!manager1,
+        where: manager1 ? employeeIdentityFilter(manager1) : undefined,
+      },
+      {
+        model: Employee,
+        as: 'manager2',
+        required: !!manager2,
+        where: manager2 ? employeeIdentityFilter(manager2) : undefined,
+      },
     ],
     distinct: true,
     order: buildOrder(query.sort, query.dir, models),
@@ -318,10 +403,21 @@ async function listAvailableEmployees(search = '') {
 }
 
 async function listRoleOptions() {
-  const { Role, RolePermission } = getModels();
+  const { Role, RolePermission, Permission } = getModels();
   const [roles, links] = await Promise.all([
     Role.findAll({ where: { ENABLED: { [Op.in]: ['1', 1, true] } }, order: [['LEVEL', 'ASC'], ['NAME', 'ASC']] }),
-    RolePermission.findAll({ where: { ENABLED: '1' }, attributes: ['ROLE_ID', 'PERMISSION_ID'], raw: true }),
+    RolePermission.findAll({
+      where: { ENABLED: '1' },
+      attributes: ['ROLE_ID', 'PERMISSION_ID'],
+      include: [{
+        model: Permission,
+        as: 'permission',
+        attributes: [],
+        required: true,
+        where: { ENABLED: '1' },
+      }],
+      raw: true,
+    }),
   ]);
   return roles.map((role) => ({
     ID: String(role.ID),

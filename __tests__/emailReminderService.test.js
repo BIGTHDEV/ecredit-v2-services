@@ -15,6 +15,7 @@ jest.mock('../services/requestService', () => ({ listApprovalHistory: jest.fn() 
 jest.mock('../services/requestWorkflowNotificationService', () => ({
   pendingApprovers: jest.fn((history) => history),
   approvalActionsFor: jest.fn(() => [{ url: 'fresh-approval-link' }]),
+  getTemporaryReminderRecipients: jest.fn(),
 }));
 jest.mock('../services/emailReminderConfigService', () => ({
   ...jest.requireActual('../services/emailReminderConfigService'),
@@ -30,17 +31,19 @@ const { getDatabase } = require('../config/database');
 const { sendEmail } = require('../services/emailService');
 const { getRequestEmailModel } = require('../services/requestEmailModelService');
 const { listApprovalHistory } = require('../services/requestService');
+const { getTemporaryReminderRecipients } = require('../services/requestWorkflowNotificationService');
 const { listSettings } = require('../services/emailReminderConfigService');
 const { buildDescription } = require('../services/emailLogService');
 const { createEmailApprovalToken } = require('../services/emailApprovalActionService');
 const {
-  approvalIdFromLog, reminderKey, getEligibility, isDue, processReminder, runEmailReminders, startEmailReminderScheduler,
+  approvalIdFromLog, reminderKey, getEligibility, isDue, isScheduledOnDay, processReminder, runEmailReminders, startEmailReminderScheduler,
   previewReminderRequests,
 } = require('../services/emailReminderService');
 
 const DRAFT = 'db8b3768-8466-4974-8dff-4c374b16a639';
 const WAITING = '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b';
 const FINAL = '014e8e8b-42cf-4b2f-8cae-e395e26efbcd';
+const COMPLETED = '407e23f9-caf5-4c4a-801d-598cf437d1ae';
 const APPROVED = 'aab5ce03-1c54-48c8-8305-6b1a017b43fd';
 const BACKWARD = 'b76065cc-6507-458d-94ce-87231cbaa57c';
 const date = (minutes) => new Date(Date.UTC(2026, 9, 16, 0, minutes));
@@ -60,7 +63,10 @@ beforeEach(() => {
     bcc: ['audit@example.com'], model: { dear: 'Original recipient' },
   };
   source = { ID: 'source', REQUEST_ID: 'request', CATEGORY: 'request-final', CREATED_DATE: date(1), UPDATED_DATE: date(1) };
-  settings = { ID: 'config', TEMPLATE: 'request-final', INTERVAL_VALUE: 1, INTERVAL_UNIT: 'hours', ENABLED: true };
+  settings = {
+    ID: 'config', TEMPLATE: 'request-final', INTERVAL_VALUE: 1, INTERVAL_UNIT: 'hours', ENABLED: true,
+    DAYS_OF_WEEK: '[0,1,2,3,4,5,6]',
+  };
   models = {
     Request: { findOne: jest.fn().mockResolvedValue({ STATUS_ID: FINAL, UPDATED_DATE: date(30), SUBMITTED_DATE: date(-10) }) },
     Approval: { findAll: jest.fn().mockResolvedValue([{ ID: 'approval', APPROVAL_TYPE_ID: APPROVED, CREATED_DATE: date(-5), UPDATED_DATE: date(0), ENABLED: true }]) },
@@ -73,13 +79,18 @@ beforeEach(() => {
   };
   database = {
     transaction: jest.fn(async (callback) => callback({ id: 'transaction' })),
-    query: jest.fn(async (sql) => sql.includes('sp_getapplock') ? [{ RESULT: 0 }] : [{ NOW: date(60) }]),
+    query: jest.fn(async (sql) => sql.includes('sp_getapplock')
+      ? [{ RESULT: 0 }]
+      : [{ NOW: date(60), DAY_OF_WEEK: 5 }]),
   };
   getModels.mockReturnValue(models);
   getDatabase.mockReturnValue(database);
   getRequestEmailModel.mockResolvedValue({ companyName: 'Current company' });
   sendEmail.mockReset().mockResolvedValue({ messageId: 'message' });
   listApprovalHistory.mockResolvedValue([]);
+  getTemporaryReminderRecipients.mockResolvedValue({
+    to: ['requester@example.com'], cc: ['super@example.com'],
+  });
   listSettings.mockResolvedValue([{ template: 'request-final', enabled: true }]);
 });
 
@@ -122,12 +133,24 @@ describe('reminder eligibility and timing', () => {
   test('does not preview candidates before the selected interval is due', async () => {
     source.DESCRIPTION = JSON.stringify({ sendParameters: parameters });
     models.Email.findAll.mockResolvedValue([source]);
-    database.query.mockImplementation(async () => [{ NOW: date(59) }]);
+    database.query.mockImplementation(async () => [{ NOW: date(59), DAY_OF_WEEK: 5 }]);
 
     const result = await previewReminderRequests('request-final', { intervalValue: 1, intervalUnit: 'hours' });
 
     expect(result.requests).toEqual([]);
     expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  test('does not preview requests on a weekday that is turned off', async () => {
+    source.DESCRIPTION = JSON.stringify({ sendParameters: parameters });
+    models.Email.findAll.mockResolvedValue([source]);
+
+    const result = await previewReminderRequests('request-final', {
+      intervalValue: 1, intervalUnit: 'hours', daysOfWeek: [0, 1, 2, 3, 4, 6],
+    });
+
+    expect(result).toEqual({ requests: [], skippedCount: 0 });
+    expect(getRequestEmailModel).not.toHaveBeenCalled();
   });
 
   test('validates template and interval when previewing', async () => {
@@ -142,6 +165,49 @@ describe('reminder eligibility and timing', () => {
     expect(eligibility.anchor).toBe(date(0).getTime());
     expect(isDue(eligibility, null, settings, date(60))).toBe(true);
     expect(isDue(eligibility, null, settings, date(59))).toBe(false);
+  });
+
+  test('Temporary reminders start after Effective Date and stop at Expiry Date', async () => {
+    models.Request.findOne.mockResolvedValue({
+      STATUS_ID: COMPLETED,
+      IS_TEMPORARY_APPROVED: true,
+      IS_PERMANENT_APPROVED: false,
+      APPROVED_VALID_FROM: date(30),
+      APPROVED_VALID_TO: date(1440),
+    });
+
+    const eligibility = await getEligibility(source, 'request-temporary', undefined, undefined, 1);
+    expect(eligibility).toEqual({
+      anchor: date(30).getTime(),
+      expiresAt: date(1440).getTime(),
+    });
+    expect(isDue(eligibility, null, settings, date(29))).toBe(false);
+    expect(isDue(eligibility, null, settings, date(30))).toBe(true);
+    expect(isDue(eligibility, null, settings, date(1440))).toBe(false);
+    expect(isDue(eligibility, { LAST_SENT_DATE: date(30) }, settings, date(89))).toBe(false);
+    expect(isDue(eligibility, { LAST_SENT_DATE: date(30) }, settings, date(90))).toBe(true);
+  });
+
+  test('Temporary reminders ignore requests without an approved adjustment and reject invalid date ranges', async () => {
+    models.Request.findOne.mockResolvedValue({
+      STATUS_ID: COMPLETED, IS_TEMPORARY_APPROVED: false, IS_PERMANENT_APPROVED: false,
+    });
+    expect(await getEligibility(source, 'request-temporary', undefined, undefined, 30)).toBeNull();
+
+    models.Request.findOne.mockResolvedValue({
+      STATUS_ID: COMPLETED,
+      IS_TEMPORARY_APPROVED: true,
+      APPROVED_VALID_FROM: date(1440),
+      APPROVED_VALID_TO: date(0),
+    });
+    await expect(getEligibility(source, 'request-temporary', undefined, undefined, 30))
+      .rejects.toThrow('Effective/Expiry date range');
+  });
+
+  test('checks the selected weekdays independently of interval eligibility', () => {
+    expect(isScheduledOnDay({ DAYS_OF_WEEK: '[1,2,3,4,5]' }, 5)).toBe(true);
+    expect(isScheduledOnDay({ DAYS_OF_WEEK: '[1,2,3,4,5]' }, 0)).toBe(false);
+    expect(isScheduledOnDay({ DAYS_OF_WEEK: '[]' }, 5)).toBe(false);
   });
 
   test('backward uses disabled approval history while draft eligibility follows current status and updated date', async () => {
@@ -281,9 +347,18 @@ describe('reminder delivery and durable state', () => {
   });
 
   test('does not send before the configured threshold', async () => {
-    database.query.mockImplementation(async (sql) => sql.includes('sp_getapplock') ? [{ RESULT: 0 }] : [{ NOW: date(59) }]);
+    database.query.mockImplementation(async (sql) => sql.includes('sp_getapplock')
+      ? [{ RESULT: 0 }]
+      : [{ NOW: date(59), DAY_OF_WEEK: 5 }]);
     await process();
     expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  test('does not send or advance delivery state on a disabled weekday', async () => {
+    settings.DAYS_OF_WEEK = '[0,1,2,3,4,6]';
+    await process();
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(models.EmailReminderState.create).not.toHaveBeenCalled();
   });
 
   test('writes SQL Server datetime columns using database time, not timezone-suffixed date strings', async () => {
@@ -373,7 +448,9 @@ describe('reminder delivery and durable state', () => {
   test('refreshes expiring approval action links for the same approver', async () => {
     models.Request.findOne.mockResolvedValue({ STATUS_ID: WAITING });
     listApprovalHistory.mockResolvedValue([{ ID: 'approval' }]);
-    database.query.mockImplementation(async (sql) => sql.includes('sp_getapplock') ? [{ RESULT: 0 }] : [{ NOW: date(61) }]);
+    database.query.mockImplementation(async (sql) => sql.includes('sp_getapplock')
+      ? [{ RESULT: 0 }]
+      : [{ NOW: date(61), DAY_OF_WEEK: 5 }]);
     await processReminder(source, 'request-approval', 'approval', parameters, 'key');
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
       model: expect.objectContaining({ approvalActions: [{ url: 'fresh-approval-link' }] }),
@@ -428,6 +505,104 @@ describe('reminder delivery and durable state', () => {
       .toEqual({ requests: [], skippedCount: 1 });
     expect(logger.error).toHaveBeenCalledWith('Unable to preview email reminder candidate',
       expect.objectContaining({ message: 'Original email has no stored send parameters.' }));
+  });
+
+  test('previews completed requests with approved adjustments that are within the expiry window', async () => {
+    source.CATEGORY = 'request-completed';
+    source.DESCRIPTION = JSON.stringify({ sendParameters: parameters });
+    models.Request.findOne.mockResolvedValue({
+      STATUS_ID: COMPLETED,
+      IS_TEMPORARY_APPROVED: true,
+      IS_PERMANENT_APPROVED: false,
+      APPROVED_VALID_FROM: date(0),
+      APPROVED_VALID_TO: date(1440),
+    });
+    models.Email.findAll.mockResolvedValue([source]);
+    getRequestEmailModel.mockResolvedValue({
+      requestNo: 'REQ-TEMP',
+      companyName: 'Example Company',
+      link: 'https://example.com/all-requests/request?tab=approver',
+      finalConfirmedDetails: { validTo: '17 Oct 2026' },
+    });
+
+    const result = await previewReminderRequests('request-temporary', {
+      intervalValue: 1, intervalUnit: 'hours', daysOfWeek: [5], daysBeforeExpiry: 1,
+    });
+
+    expect(result).toEqual({
+      requests: [{
+        requestId: 'request',
+        requestNo: 'REQ-TEMP',
+        companyName: 'Example Company',
+        requestLink: 'https://example.com/all-requests/request?tab=approver',
+        approverName: null,
+        expiryDate: '17 Oct 2026',
+      }],
+      skippedCount: 0,
+    });
+    expect(models.Email.findAll.mock.calls[0][0].where.CATEGORY[Op.in]).toContain('request-completed');
+  });
+
+  test('sends Temporary reminders using the original completed email log', async () => {
+    source.CATEGORY = 'request-completed';
+    source.DESCRIPTION = JSON.stringify({ sendParameters: parameters });
+    models.Request.findOne.mockResolvedValue({
+      STATUS_ID: COMPLETED,
+      IS_TEMPORARY_APPROVED: false,
+      IS_PERMANENT_APPROVED: true,
+      APPROVED_VALID_FROM: date(0),
+      APPROVED_VALID_TO: date(1440),
+    });
+    models.Email.findAll.mockResolvedValue([source]);
+    settings.TEMPLATE = 'request-temporary';
+    settings.DAYS_BEFORE_EXPIRY = 1;
+    getRequestEmailModel.mockResolvedValue({
+      requestNo: 'REQ-TEMP',
+      companyName: 'Current company',
+      finalConfirmedDetails: { validTo: '17 Oct 2026' },
+    });
+    listSettings.mockResolvedValue([{ template: 'request-temporary', enabled: true }]);
+
+    await runEmailReminders();
+
+    expect(models.Email.findAll.mock.calls[0][0].where.CATEGORY[Op.in]).toContain('request-completed');
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
+      template: 'request-temporary',
+      subject: 'Credit adjustment expiry reminder Current company (REQ-TEMP)',
+      recipients: { to: ['requester@example.com'], cc: ['super@example.com'] },
+      intendedRecipients: { to: ['requester@example.com'], cc: ['super@example.com'] },
+      resendOf: 'source',
+      reminderContext: expect.objectContaining({ automatic: true }),
+    }));
+    expect(getTemporaryReminderRecipients).toHaveBeenCalledWith('request', { transaction: { id: 'transaction' } });
+  });
+
+  test.each(['dev', 'qas'])('Temporary reminder records requester and Super User as test-only recipients in %s', async (environment) => {
+    config.environment = environment;
+    parameters.environment = environment;
+    source.CATEGORY = 'request-completed';
+    source.DESCRIPTION = JSON.stringify({ sendParameters: parameters });
+    models.Request.findOne.mockResolvedValue({
+      STATUS_ID: COMPLETED,
+      IS_TEMPORARY_APPROVED: true,
+      IS_PERMANENT_APPROVED: false,
+      APPROVED_VALID_FROM: date(0),
+      APPROVED_VALID_TO: date(1440),
+    });
+    models.Email.findAll.mockResolvedValue([source]);
+    settings.TEMPLATE = 'request-temporary';
+    settings.DAYS_BEFORE_EXPIRY = 1;
+    listSettings.mockResolvedValue([{ template: 'request-temporary', enabled: true }]);
+
+    await runEmailReminders();
+
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
+      template: 'request-temporary',
+      recipients: { to: ['requester@example.com'], cc: ['super@example.com'] },
+      intendedRecipients: { to: ['requester@example.com'], cc: ['super@example.com'] },
+      effectiveRecipients: { to: ['requester@example.com'], cc: ['super@example.com'] },
+      actorEmail: 'original@example.com',
+    }));
   });
 
   test.each([

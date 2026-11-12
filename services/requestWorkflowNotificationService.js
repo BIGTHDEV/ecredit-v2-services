@@ -169,59 +169,81 @@ function resolveRecipients(event, history, actor) {
     };
 }
 
-async function getCompletedEmailContext(requestId) {
-    const database = getDatabase();
-    const [requestRows, superUserRows, approverRows] = await Promise.all([
-        database.query(
-            `SELECT LOWER(TB3.CURRENT_EMAIL) AS MANAGER_REQUESTER,
-                    TB1.IS_TERM_APPROVED,
-                    TB1.IS_LIMIT_APPROVED,
-                    TB1.APPROVED_RATING_ID
-             FROM REQUESTS AS TB1
-             LEFT JOIN S_EMPLOYEE1 AS TB2 ON TB1.REQUESTED_BY = TB2.EMP_CODE
-             LEFT JOIN S_EMPLOYEE1 AS TB3 ON TB2.APPROVER_ID1 = TB3.EMP_CODE
-             WHERE TB1.ID = :requestId`,
-            { replacements: { requestId }, type: QueryTypes.SELECT },
-        ),
-        database.query(
-            `SELECT DISTINCT LOWER(TB4.CURRENT_EMAIL) AS EMAIL,
-                    COALESCE(NULLIF(LTRIM(RTRIM(TB4.NAME_ENG)), ''), TB4.USERNAME) AS NAME
-             FROM USER_ROLES AS TB1
-             INNER JOIN ROLES AS TB2 ON TB2.ID = TB1.ROLE_ID AND TB2.ENABLED = '1'
-             INNER JOIN USERS AS TB3 ON TB3.ID = TB1.USER_ID AND TB3.ENABLED = '1'
-             INNER JOIN S_EMPLOYEE1 AS TB4 ON TB4.EMP_CODE = TB3.ID
-             WHERE TB1.ENABLED = '1'
-               AND LOWER(TB2.NAME) = 'super user'
-               AND NULLIF(LTRIM(RTRIM(TB4.CURRENT_EMAIL)), '') IS NOT NULL`,
-            { type: QueryTypes.SELECT },
-        ),
-        database.query(
-            `SELECT DISTINCT LOWER(TB3.CURRENT_EMAIL) AS EMAIL,
-                    COALESCE(NULLIF(LTRIM(RTRIM(TB3.NAME_ENG)), ''), TB3.USERNAME) AS NAME
-             FROM APPROVERS AS TB1
-             INNER JOIN APPROVER_TYPES AS TB2 ON TB2.ID = TB1.APPROVER_TYPE_ID AND TB2.ENABLED = '1'
-             INNER JOIN S_EMPLOYEE1 AS TB3 ON TB3.EMP_CODE = TB1.APPROVER_ID
-             WHERE TB1.ENABLED = '1'
-               AND LOWER(TB2.NAME) IN (
-                   'manager approve (bds)',
-                   'section manager approve (finance)',
-                   'manager approve (finance)'
-               )
-               AND NULLIF(LTRIM(RTRIM(TB3.CURRENT_EMAIL)), '') IS NOT NULL`,
-            { type: QueryTypes.SELECT },
-        ),
-    ]);
-    const request = requestRows[0] || {};
-    const isIncluded = (value) => value === true || value === 1 || value === '1';
+async function getSuperUserEmailRecipients(transaction) {
+  const database = getDatabase();
+  const rows = await database.query(
+    `SELECT DISTINCT LOWER(TB4.CURRENT_EMAIL) AS EMAIL,
+            COALESCE(NULLIF(LTRIM(RTRIM(TB4.NAME_ENG)), ''), TB4.USERNAME) AS NAME
+     FROM USER_ROLES AS TB1
+     INNER JOIN ROLES AS TB2 ON TB2.ID = TB1.ROLE_ID AND TB2.ENABLED = '1'
+     INNER JOIN USERS AS TB3 ON TB3.ID = TB1.USER_ID AND TB3.ENABLED = '1'
+     INNER JOIN S_EMPLOYEE1 AS TB4 ON TB4.EMP_CODE = TB3.ID
+     WHERE TB1.ENABLED = '1'
+       AND LOWER(TB2.NAME) = 'super user'
+       AND NULLIF(LTRIM(RTRIM(TB4.CURRENT_EMAIL)), '') IS NOT NULL`,
+    { type: QueryTypes.SELECT, ...(transaction ? { transaction } : {}) },
+  );
+  return rows.map((row) => recipient(row.EMAIL, row.NAME));
+}
 
-    return {
-        managerRequesterEmail: request.MANAGER_REQUESTER,
-        superUserRecipients: superUserRows.map((row) => recipient(row.EMAIL, row.NAME)),
-        approverTypeRecipients: approverRows.map((row) => recipient(row.EMAIL, row.NAME)),
-        ratingIncluded: Boolean(String(request.APPROVED_RATING_ID || '').trim()),
-        termIncluded: isIncluded(request.IS_TERM_APPROVED),
-        limitIncluded: isIncluded(request.IS_LIMIT_APPROVED),
-    };
+async function getCompletedEmailContext(requestId, { transaction } = {}) {
+  const database = getDatabase();
+  const queryOptions = { type: QueryTypes.SELECT, ...(transaction ? { transaction } : {}) };
+  const [requestRows, superUserRecipients, approverRows] = await Promise.all([
+    database.query(
+      `SELECT LOWER(TB3.CURRENT_EMAIL) AS MANAGER_REQUESTER,
+              TB1.IS_TERM_APPROVED,
+              TB1.IS_LIMIT_APPROVED,
+              TB1.APPROVED_RATING_ID
+       FROM REQUESTS AS TB1
+       LEFT JOIN S_EMPLOYEE1 AS TB2 ON TB1.REQUESTED_BY = TB2.EMP_CODE
+       LEFT JOIN S_EMPLOYEE1 AS TB3 ON TB2.APPROVER_ID1 = TB3.EMP_CODE
+       WHERE TB1.ID = :requestId`,
+      { ...queryOptions, replacements: { requestId } },
+    ),
+    getSuperUserEmailRecipients(transaction),
+    database.query(
+      `SELECT DISTINCT LOWER(TB3.CURRENT_EMAIL) AS EMAIL,
+              COALESCE(NULLIF(LTRIM(RTRIM(TB3.NAME_ENG)), ''), TB3.USERNAME) AS NAME
+       FROM APPROVERS AS TB1
+       INNER JOIN APPROVER_TYPES AS TB2 ON TB2.ID = TB1.APPROVER_TYPE_ID AND TB2.ENABLED = '1'
+       INNER JOIN S_EMPLOYEE1 AS TB3 ON TB3.EMP_CODE = TB1.APPROVER_ID
+       WHERE TB1.ENABLED = '1'
+         AND LOWER(TB2.NAME) IN (
+           'manager approve (bds)',
+           'section manager approve (finance)',
+           'manager approve (finance)'
+         )
+         AND NULLIF(LTRIM(RTRIM(TB3.CURRENT_EMAIL)), '') IS NOT NULL`,
+      queryOptions,
+    ),
+  ]);
+  const request = requestRows[0] || {};
+  const isIncluded = (value) => value === true || value === 1 || value === '1';
+
+  return {
+    managerRequesterEmail: request.MANAGER_REQUESTER,
+    superUserRecipients,
+    approverTypeRecipients: approverRows.map((row) => recipient(row.EMAIL, row.NAME)),
+    ratingIncluded: Boolean(String(request.APPROVED_RATING_ID || '').trim()),
+    termIncluded: isIncluded(request.IS_TERM_APPROVED),
+    limitIncluded: isIncluded(request.IS_LIMIT_APPROVED),
+  };
+}
+
+async function getTemporaryReminderRecipients(requestId, { transaction } = {}) {
+  const [history, superUserRecipients] = await Promise.all([
+    listApprovalHistory(requestId, ...(transaction ? [{ transaction }] : [])),
+    getSuperUserEmailRecipients(transaction),
+  ]);
+  const requester = resolveRecipients('completed', history, {}).toRecords;
+  const recipients = {
+    to: uniqueAddresses(requester),
+    cc: uniqueAddresses(superUserRecipients),
+  };
+  if (!recipients.to.length) throw new Error(`No requester email recipient was found for request ${requestId}.`);
+  if (!recipients.cc.length) throw new Error('No enabled Super User email recipients were found for Temporary reminder.');
+  return recipients;
 }
 
 function resolveCompletedEmailRecipients(resolved, context) {
@@ -389,6 +411,7 @@ module.exports = {
     bdsReviewApprovers,
     resolveRecipients,
     getCompletedEmailContext,
+    getTemporaryReminderRecipients,
     resolveCompletedEmailRecipients,
     buildApprovalSubject,
     buildCompletedSubject,

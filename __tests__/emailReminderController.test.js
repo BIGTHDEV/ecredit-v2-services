@@ -12,7 +12,11 @@ describe('email reminder administration API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    req = { user: { profile: { ROLE: 'System Admin', CODE: '123' } }, params: { template: 'request-final' }, body: { enabled: true, intervalValue: 2, intervalUnit: 'days' } };
+    req = {
+      user: { profile: { ROLE: 'System Admin', CODE: '123' } },
+      params: { template: 'request-final' },
+      body: { enabled: true, intervalValue: 2, intervalUnit: 'days', daysOfWeek: [1, 2, 3, 4, 5] },
+    };
     res = { locals: {}, json: jest.fn(), setHeader: jest.fn() };
     next = jest.fn();
     service.listSettings.mockResolvedValue([]);

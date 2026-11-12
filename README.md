@@ -57,6 +57,14 @@ snapshot as its initial decision values. Subsequent Final Review saves and
 confirmation update the snapshot without modifying earlier approval history.
 This applies to new transitions to Final; existing snapshots are not backfilled.
 
+### Existing credit values in request details
+
+The request response returns Existing Credit Rating as `EXISTING_RATING`,
+Existing Credit Term as `EXISTING_TERM_ID`, and Existing Credit Limit as
+`EXISTING_LIMIT_AMOUNT`. The frontend resolves the term ID using `/requests/terms`.
+These values are separate from `APPROVED_TERM` and `APPROVED_LIMIT`; no schema
+change or migration is required.
+
 ### Administration email logs
 
 `GET /requests/email-logs` lists email logs across active requests for System Admin

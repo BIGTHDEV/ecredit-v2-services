@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/49</span>
+                <span class='fraction'>0/43</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/2</span>
+                <span class='fraction'>0/0</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/49</span>
+                <span class='fraction'>0/43</span>
             </div>
         
             
@@ -109,26 +109,7 @@
 <a name='L44'></a><a href='#L44'>44</a>
 <a name='L45'></a><a href='#L45'>45</a>
 <a name='L46'></a><a href='#L46'>46</a>
-<a name='L47'></a><a href='#L47'>47</a>
-<a name='L48'></a><a href='#L48'>48</a>
-<a name='L49'></a><a href='#L49'>49</a>
-<a name='L50'></a><a href='#L50'>50</a>
-<a name='L51'></a><a href='#L51'>51</a>
-<a name='L52'></a><a href='#L52'>52</a>
-<a name='L53'></a><a href='#L53'>53</a>
-<a name='L54'></a><a href='#L54'>54</a>
-<a name='L55'></a><a href='#L55'>55</a>
-<a name='L56'></a><a href='#L56'>56</a>
-<a name='L57'></a><a href='#L57'>57</a>
-<a name='L58'></a><a href='#L58'>58</a>
-<a name='L59'></a><a href='#L59'>59</a>
-<a name='L60'></a><a href='#L60'>60</a>
-<a name='L61'></a><a href='#L61'>61</a>
-<a name='L62'></a><a href='#L62'>62</a>
-<a name='L63'></a><a href='#L63'>63</a>
-<a name='L64'></a><a href='#L64'>64</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<a name='L47'></a><a href='#L47'>47</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -138,21 +119,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -190,34 +156,17 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const express = <span class="cstat-no" title="statement not covered" >require('express');</span>
-const rateLimit = <span class="cstat-no" title="statement not covered" >require('express-rate-limit');</span>
-const config = <span class="cstat-no" title="statement not covered" >require('../config/env');</span>
 const authenticationMiddleware = <span class="cstat-no" title="statement not covered" >require('../middlewares/authentication');</span>
+const companyInfoLookupLimiter = <span class="cstat-no" title="statement not covered" >require('../middlewares/companyInfoLookupLimiter');</span>
 const requestController = <span class="cstat-no" title="statement not covered" >require('../controllers/requestController');</span>
 const attachmentController = <span class="cstat-no" title="statement not covered" >require('../controllers/attachmentController');</span>
 const eventLogController = <span class="cstat-no" title="statement not covered" >require('../controllers/eventLogController');</span>
 const approvalHistoryController = <span class="cstat-no" title="statement not covered" >require('../controllers/approvalHistoryController');</span>
 const requestMetadataController = <span class="cstat-no" title="statement not covered" >require('../controllers/requestMetadataController');</span>
 const emailController = <span class="cstat-no" title="statement not covered" >require('../controllers/emailController');</span>
-const crmSimulationController = <span class="cstat-no" title="statement not covered" >require('../controllers/crmSimulationController');</span>
 &nbsp;
 const router = <span class="cstat-no" title="statement not covered" >express.Router();</span>
 &nbsp;
-const companyInfoLookupLimiter = <span class="cstat-no" title="statement not covered" >rateLimit({</span>
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: { code: 'RATE_LIMITED', message: 'Too many company information searches. Please try again later.' },
-  },
-});
-&nbsp;
-<span class="cstat-no" title="statement not covered" >if (!config.isProduction()) {</span>
-<span class="cstat-no" title="statement not covered" >  router.get('/simulate-crm-request/identifiers', authenticationMiddleware, crmSimulationController.getSimulationIdentifiers);</span>
-<span class="cstat-no" title="statement not covered" >  router.post('/simulate-crm-request', authenticationMiddleware, crmSimulationController.simulateCrmRequest);</span>
-}
 <span class="cstat-no" title="statement not covered" >router.get('/', authenticationMiddleware, requestController.listRequests);</span>
 <span class="cstat-no" title="statement not covered" >router.get('/statuses', authenticationMiddleware, requestMetadataController.listEnabledStatuses);</span>
 <span class="cstat-no" title="statement not covered" >router.get('/log-types', authenticationMiddleware, requestMetadataController.listEnabledLogTypes);</span>
@@ -259,7 +208,7 @@ const companyInfoLookupLimiter = <span class="cstat-no" title="statement not cov
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-17T04:17:03.608Z
+                at 2026-11-12T09:22:50.687Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

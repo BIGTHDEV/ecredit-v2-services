@@ -5,6 +5,8 @@ module.exports = (sequelize) => sequelize.define('EmailReminderConfig', {
   TEMPLATE: { type: DataTypes.STRING(128), allowNull: false, unique: true },
   INTERVAL_VALUE: { type: DataTypes.INTEGER, allowNull: false },
   INTERVAL_UNIT: { type: DataTypes.STRING(16), allowNull: false },
+  DAYS_OF_WEEK: { type: DataTypes.STRING(32), allowNull: false },
+  DAYS_BEFORE_EXPIRY: DataTypes.INTEGER,
   CREATED_DATE: { type: DataTypes.DATE, allowNull: false },
   UPDATED_DATE: { type: DataTypes.DATE, allowNull: false },
   CREATED_BY: { type: DataTypes.INTEGER, allowNull: false },

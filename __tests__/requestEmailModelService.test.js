@@ -181,7 +181,7 @@ describe('requestEmailModelService', () => {
       approvedRating: { NAME: 'A (Low Risk)' },
     }, '-', [
       { APPROVER_TYPE_NAME: 'Requester', APPROVAL_TYPE_NAME: 'Requested', APPROVER_NAME: 'BAE', SORTING: 1, CURRENT_CYCLE: true },
-      { APPROVER_TYPE_NAME: 'Credit Team', APPROVAL_TYPE_NAME: 'Suggested', APPROVER_NAME: 'NUT', SORTING: 2, CURRENT_CYCLE: true, CREDIT_LIMIT: 250000, CREDIT_TERM: 'S045', CREDIT_RATING: 'B' },
+      { APPROVER_TYPE_NAME: 'Credit Team', APPROVAL_TYPE_NAME: 'Verified', APPROVER_NAME: 'NUT', SORTING: 2, CURRENT_CYCLE: true, CREDIT_LIMIT: 250000, CREDIT_TERM: 'S045', CREDIT_RATING: 'B' },
       { APPROVER_TYPE_NAME: 'Manager Approve (Commercial)', APPROVAL_TYPE_NAME: 'Pending', APPROVER_NAME: 'NJ-NARONGRIT', SORTING: 3, CURRENT_CYCLE: true, CREDIT_LIMIT: 250000, CREDIT_TERM: 'C000 - 0 days cash on delivery', CREDIT_RATING: '', COMMENT: 'Comment Test', INCLUDED_CLEAR_OUTSTANDING_BALANCE: 'Yes', INCLUDED_WITHIN_APPROVED_LIMIT: 'Yes', INCLUDED_BANK_GUARANTEE: 'Yes', BANK_GUARANTEE_AMOUNT: 777771, INCLUDED_CASH_DEPOSIT: 'Yes', CASH_DEPOSIT_AMOUNT: 88882, TEMPORARY: 'Yes', PERMANENT: 'No', VALID_FROM: '06 Aug 2026, 12:00 AM', VALID_TO: '30 Aug 2026, 12:00 AM' },
     ]);
 
@@ -196,7 +196,7 @@ describe('requestEmailModelService', () => {
     });
     expect(model.creditDetailsSummary).toEqual([
       { stepName: 'Requester', step: 1, approver: 'BAE', status: 'Requested', isCurrentStep: false, isLastActionedStep: false },
-      { stepName: 'Credit Team', step: 2, approver: 'NUT', status: 'Suggested', isCurrentStep: false, isLastActionedStep: true },
+      { stepName: 'Credit Team', step: 2, approver: 'NUT', status: 'Verified', isCurrentStep: false, isLastActionedStep: true },
       { stepName: 'Manager Approve (Commercial)', step: 3, approver: 'NJ-NARONGRIT', status: 'Pending', isCurrentStep: true, isLastActionedStep: false },
     ]);
     expect(model.currentStep).toEqual(expect.objectContaining({
@@ -230,7 +230,7 @@ describe('requestEmailModelService', () => {
   test('hides last-action details when the last actioned step was BDS Review', () => {
     const model = mapRequestToEmailModel({}, '-', [
       { APPROVER_TYPE_NAME: 'Requester', APPROVAL_TYPE_NAME: 'Requested', APPROVER_NAME: 'ANM-ANUSORNM', SORTING: 1, CURRENT_CYCLE: true },
-      { APPROVER_TYPE_NAME: 'BDS Review', APPROVAL_TYPE_NAME: 'Suggested', APPROVER_NAME: 'NUC-NUTTAPONGC', SORTING: 2, CURRENT_CYCLE: true },
+      { APPROVER_TYPE_NAME: 'BDS Review', APPROVAL_TYPE_NAME: 'Verified', APPROVER_NAME: 'NUC-NUTTAPONGC', SORTING: 2, CURRENT_CYCLE: true },
       { APPROVER_TYPE_NAME: 'Section Manager Approve (Finance)', APPROVAL_TYPE_NAME: 'Pending', APPROVER_NAME: 'TRP-TRIPORNP', SORTING: 3, CURRENT_CYCLE: true },
     ]);
 
@@ -241,7 +241,7 @@ describe('requestEmailModelService', () => {
   test('uses the last approved movement for the Final email without changing the shared last action', () => {
     const model = mapRequestToEmailModel({}, '-', [
       { APPROVER_TYPE_NAME: 'Requester', APPROVAL_TYPE_NAME: 'Requested', APPROVER_NAME: 'BAE', SORTING: 1, CURRENT_CYCLE: true },
-      { APPROVER_TYPE_NAME: 'Credit Team', APPROVAL_TYPE_NAME: 'Suggested', APPROVER_NAME: 'NUT', SORTING: 2, CURRENT_CYCLE: true },
+      { APPROVER_TYPE_NAME: 'Credit Team', APPROVAL_TYPE_NAME: 'Verified', APPROVER_NAME: 'NUT', SORTING: 2, CURRENT_CYCLE: true },
       { APPROVER_TYPE_NAME: 'Section Manager Approve (Finance)', APPROVAL_TYPE_NAME: 'Approved', APPROVER_NAME: 'WI-WARINNEREEW', SORTING: 3, CURRENT_CYCLE: true },
       { APPROVER_TYPE_NAME: 'Manager Approve (Commercial)', APPROVAL_TYPE_NAME: 'Approved', APPROVER_NAME: 'NJ-NARONGRIT', SORTING: 4, CURRENT_CYCLE: true },
     ]);
@@ -253,7 +253,7 @@ describe('requestEmailModelService', () => {
   test('keeps last-action details when the last actioned step was not BDS Review', () => {
     const model = mapRequestToEmailModel({}, '-', [
       { APPROVER_TYPE_NAME: 'Requester', APPROVAL_TYPE_NAME: 'Requested', APPROVER_NAME: 'ANM-ANUSORNM', SORTING: 1, CURRENT_CYCLE: true },
-      { APPROVER_TYPE_NAME: 'Credit Team', APPROVAL_TYPE_NAME: 'Suggested', APPROVER_NAME: 'NUT', SORTING: 2, CURRENT_CYCLE: true },
+      { APPROVER_TYPE_NAME: 'Credit Team', APPROVAL_TYPE_NAME: 'Verified', APPROVER_NAME: 'NUT', SORTING: 2, CURRENT_CYCLE: true },
       { APPROVER_TYPE_NAME: 'Section Manager Approve (Finance)', APPROVAL_TYPE_NAME: 'Pending', APPROVER_NAME: 'TRP-TRIPORNP', SORTING: 3, CURRENT_CYCLE: true },
     ]);
 

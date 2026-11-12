@@ -1,14 +1,17 @@
 /* eslint-env jest */
 
 jest.mock('../config/database', () => ({ getDatabase: jest.fn() }));
+jest.mock('../services/requestService', () => ({ listApprovalHistory: jest.fn() }));
 
 const { getDatabase } = require('../config/database');
+const { listApprovalHistory } = require('../services/requestService');
 
 const {
   pendingApprovers,
   bdsReviewApprovers,
   resolveRecipients,
   getCompletedEmailContext,
+  getTemporaryReminderRecipients,
   resolveCompletedEmailRecipients,
   buildApprovalSubject,
   buildCompletedSubject,
@@ -140,6 +143,38 @@ describe('request workflow notification recipients', () => {
     expect(query.mock.calls[2][0]).toContain('section manager approve (finance)');
   });
 
+  it('resolves requester and enabled Super User addresses for Temporary reminders', async () => {
+    const transaction = { id: 'temporary-reminder' };
+    listApprovalHistory.mockResolvedValue([
+      approval({
+        APPROVER_TYPE_NAME: 'Requester',
+        APPROVER_NAME: 'REQUESTER',
+        APPROVER_EMAIL: 'requester@example.com',
+      }),
+    ]);
+    const query = jest.fn().mockResolvedValue([{ EMAIL: 'super@example.com', NAME: 'SUPER-USER' }]);
+    getDatabase.mockReturnValue({ query });
+
+    await expect(getTemporaryReminderRecipients('request-1', { transaction })).resolves.toEqual({
+      to: ['requester@example.com'],
+      cc: ['super@example.com'],
+    });
+    expect(listApprovalHistory).toHaveBeenCalledWith('request-1', { transaction });
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][1].transaction).toBe(transaction);
+  });
+
+  it('fails Temporary recipient resolution if the requester or Super User group is missing', async () => {
+    listApprovalHistory.mockResolvedValue([]);
+    getDatabase.mockReturnValue({ query: jest.fn().mockResolvedValue([]) });
+    await expect(getTemporaryReminderRecipients('request-1')).rejects.toThrow('No requester email recipient');
+
+    listApprovalHistory.mockResolvedValue([
+      approval({ APPROVER_TYPE_NAME: 'Requester', APPROVER_EMAIL: 'requester@example.com' }),
+    ]);
+    await expect(getTemporaryReminderRecipients('request-1')).rejects.toThrow('No enabled Super User email recipients');
+  });
+
   it.each([
     ['Rating only', false, false, false],
     ['Rating with Term', true, false, true],
@@ -213,7 +248,7 @@ describe('request workflow notification recipients', () => {
         APPROVER_TYPE_NAME: 'BDS Review',
         APPROVER_NAME: 'BDS',
         APPROVER_EMAIL: 'bds@example.com',
-        APPROVAL_TYPE_NAME: 'Suggested',
+        APPROVAL_TYPE_NAME: 'Verified',
       }),
     ];
 

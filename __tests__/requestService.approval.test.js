@@ -575,6 +575,7 @@ describe('requestService.listApprovalHistory', () => {
 
     const [sql, options] = query.mock.calls[0];
     expect(sql).toContain("WHEN TB1.APPROVAL_STEP = 2 AND TB2.NAME = 'BDS Review'");
+    expect(sql).toContain("'Verified' COLLATE DATABASE_DEFAULT AS APPROVAL_TYPE_NAME");
     expect(sql).toContain('ISNULL(TB8.PROPOSED_DISPLAYED_NOTES, \'-\') COLLATE DATABASE_DEFAULT');
     expect(sql).not.toContain('ISNULL(TB8.PROPOSED_NOTES, \'-\') COLLATE DATABASE_DEFAULT');
     expect(sql).toContain('ELSE ISNULL(TB1.DESCRIPTION, \'-\') COLLATE DATABASE_DEFAULT');

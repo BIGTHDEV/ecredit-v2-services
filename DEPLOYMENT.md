@@ -126,17 +126,21 @@ authentication). Maintenance role checks do not fix that pre-existing authentica
 
 ## Email Reminders
 
-Before deploying this feature, run
-[`database/migrations/20261016_add_email_reminders.sql`](database/migrations/20261016_add_email_reminders.sql)
-against each environment's database. The script is transactional and rerunnable;
-it preserves existing configuration and delivery state. No automatic schema sync
-or migration is performed by the API.
+Before deploying this feature, run the email reminder migrations against each
+environment's database in filename order:
+[`database/migrations/20261016_add_email_reminders.sql`](database/migrations/20261016_add_email_reminders.sql),
+[`database/migrations/20261112_add_email_reminder_weekdays.sql`](database/migrations/20261112_add_email_reminder_weekdays.sql),
+and [`database/migrations/20261112_add_temporary_email_reminder.sql`](database/migrations/20261112_add_temporary_email_reminder.sql).
+The scripts are transactional and rerunnable; they preserve existing
+configuration and delivery state. No automatic schema sync or migration is
+performed by the API.
 
 The migration creates:
 
 - `EMAIL_REMINDER_CONFIGS`: the requested audit columns (`ID VARCHAR(128)`,
   `CREATED_DATE`, `UPDATED_DATE`, `CREATED_BY`, `UPDATED_BY`, `ENABLED DEFAULT 1`,
-  nullable `SORTING`), plus unique `TEMPLATE`, `INTERVAL_VALUE`, `INTERVAL_UNIT`.
+  nullable `SORTING`), plus unique `TEMPLATE`, `INTERVAL_VALUE`, `INTERVAL_UNIT`,
+  selected `DAYS_OF_WEEK`, and nullable `DAYS_BEFORE_EXPIRY` for Temporary.
 - `EMAIL_REMINDER_STATES`: durable per-request/template/approval delivery state,
   including `SOURCE_EMAIL_ID`, `LAST_SENT_DATE`, `LAST_ATTEMPT_DATE`, `SENT_COUNT`
   and `LAST_ERROR`. This prevents a service restart from resetting reminder rounds.
@@ -146,10 +150,12 @@ Reminder audit and delivery timestamps are written with SQL Server `GETDATE()`.
 Keep these writes database-side: Sequelize serializes JavaScript `Date` values
 with a timezone suffix, which is incompatible with the existing `DATETIME` columns.
 
-All four initial settings are deliberately **disabled**, with a one-day interval.
+All five settings are deliberately **disabled**, with a one-day interval.
 System Admin / Super User can configure them in **Administration > Email Reminders**.
 Each template has an enable checkbox and a whole-number interval (1-365) in minutes,
 hours or days. Saving affects the next scheduler check; no restart is needed.
+The Temporary template also requires a whole number of 1-365 days before expiry;
+its default is 30 days.
 Enabling a template includes already-overdue eligible historical logs, so review
 the backlog before enabling it in PRD.
 
@@ -159,12 +165,19 @@ the backlog before enabling it in PRD.
 | `request-backward.hbs` | Latest current-cycle Backward approval `UPDATED_DATE`, including disabled approval history | Request leaves Draft (resubmit/cancel); editing alone does not stop/reset it |
 | `request-draft.hbs` | `REQUESTS.UPDATED_DATE`; edits restart the timer | Request status changes from Draft; submission or Backward history does not independently affect eligibility |
 | `request-final.hbs` | Latest current-cycle Approved approval `UPDATED_DATE` | Request leaves Final (complete/cancel); editing alone does not stop/reset it |
+| `request-temporary.hbs` | Later of approved Effective Date or (`APPROVED_VALID_TO` minus configured days-before-expiry) | Expiry Date is reached or request leaves Completed; only approved Temporary/Permanent adjustments with a valid date range qualify |
 
 Only successful original email logs in the active environment are sources.
 Reminders and manual resends are not new reminder sources. The latest original
 log per request/template is used (per approval ID for approval emails, including
-parallel approvers). The original To/CC/BCC and base subject are reused, current
-request content is rebuilt, and approval action links are freshly signed.
+parallel approvers). Other workflow reminders reuse the original To/CC/BCC and
+base subject, current request content is rebuilt, and approval action links are
+freshly signed.
+Temporary reminders use the original successful `request-completed` Email Log
+as their source, but send to the Requester and CC enabled Super User recipients
+on PRD, with an expiry-specific subject and the
+dedicated `request-temporary.hbs` reminder. The selected send weekdays and repeat interval apply after the
+reminder window opens; no reminder is sent on or after the Expiry Date.
 Draft reminders require that the original `request-draft` log is the only
 non-automatic `request-draft` log for that request. Logs created by automatic
 Draft reminders do not count; a manual resend or another Draft email log makes
@@ -175,14 +188,16 @@ single-original-log rule. Stored `sendParameters` and matching runtime
 environment are still required; changing the category filter does not convert
 the external API's flat log payload into send parameters.
 Reminder subjects start with `Reminder!! [e-Credit]`, `Reminder!! [QAS e-Credit]`
-or `Reminder!! [DEV e-Credit]`, followed by the original subject text. The four
+or `Reminder!! [DEV e-Credit]`, followed by the original subject text. All five
 reminder templates render a red `Reminder!!` banner only when the email service
 sets `isReminder` from automatic reminder metadata. Ordinary workflow emails and
 ordinary manual resends do not display the banner. Resending a reminder from
 Email Logs preserves its reminder metadata and presentation.
 DEV/QAS reuse only the single original To recipient from the log, without CC/BCC
-(legacy CC/BCC entries are discarded rather than blocking delivery); they
-never send to a real approver as a fallback. Historical approval logs use their
+(legacy CC/BCC entries are discarded rather than blocking delivery); Temporary
+emails display the intended Requester and Super User To/CC in the
+`Show for testing only.` footer but deliver only to that original tester.
+DEV/QAS never send to a real approver or requester as a fallback. Historical approval logs use their
 signed action links to identify the approver even after token expiry; logs with
 missing/invalid approval identity are skipped with an explicit server error log.
 Drafts without an original draft email log are intentionally not mailed; this

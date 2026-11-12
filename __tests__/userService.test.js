@@ -3,8 +3,9 @@
 jest.mock('../models', () => ({ getModels: jest.fn() }));
 jest.mock('../config/database', () => ({ getDatabase: jest.fn() }));
 
-const { Op } = require('sequelize');
+const { Op, Sequelize } = require('sequelize');
 const { getModels } = require('../models');
+const actualModelRegistry = jest.requireActual('../models');
 const userService = require('../services/userService');
 const { recordPresence } = require('../services/sessionPresenceService');
 
@@ -91,15 +92,21 @@ describe('userService', () => {
     });
 
     const options = findAndCountAll.mock.calls[0][0];
-    expect(options.where[Op.and]).toHaveLength(2);
+    const userInclude = options.include.find((include) => include.as === 'user');
+    const updatedByInclude = userInclude.include.find((include) => include.as === 'updatedByEmployee');
+    expect(userInclude.where[Op.and]).toHaveLength(1);
+    expect(updatedByInclude.required).toBe(true);
+    expect(updatedByInclude.where[Op.and]).toHaveLength(2);
     expect(options.order).toEqual([
       [{ model: models.User, as: 'user' }, { model: models.Employee, as: 'updatedByEmployee' }, 'INITIALS', 'ASC'],
       [{ model: models.User, as: 'user' }, { model: models.Employee, as: 'updatedByEmployee' }, 'USERNAME', 'ASC'],
       ['EMP_CODE', 'ASC'],
     ]);
-    expect(options.include[0].include).toEqual(expect.arrayContaining([
-      expect.objectContaining({ model: models.Employee, as: 'updatedByEmployee', required: false }),
-    ]));
+    expect(updatedByInclude).toEqual(expect.objectContaining({
+      model: models.Employee,
+      as: 'updatedByEmployee',
+      attributes: ['EMP_CODE', 'INITIALS', 'USERNAME'],
+    }));
     expect(result.items[0]).toMatchObject({
       UPDATED_DATE: '12 Oct 2026 10:29 AM',
       UPDATED_BY: 'NUC-nuttapongc',
@@ -118,18 +125,122 @@ describe('userService', () => {
 
     await userService.listUsers({ page: '1', pageSize: '25', [filterKey]: 'NUC' });
 
-    const conditions = findAndCountAll.mock.calls[0][0].where[Op.and];
-    const identityCondition = conditions.find((condition) => condition[Op.or]);
+    const options = findAndCountAll.mock.calls[0][0];
+    const userInclude = options.include.find((include) => include.as === 'user');
+    const identityCondition = filterKey === 'USER'
+      ? options.where[Op.and].find((condition) => condition[Op.or])
+      : filterKey === 'UPDATED_BY'
+        ? userInclude.include.find((include) => include.as === 'updatedByEmployee').where
+        : options.include.find((include) => include.as === association).where;
     expect(identityCondition).toBeDefined();
     expect(identityCondition[Op.or]).toHaveLength(2);
     const generatedCondition = require('util').inspect(identityCondition, { depth: null });
     expect(generatedCondition).toContain('INITIALS');
     expect(generatedCondition).toContain('USERNAME');
     expect(generatedCondition).toContain('%NUC%');
-    if (association !== 'Employee') {
-      expect(generatedCondition).toContain(`$${association}.INITIALS$`);
-      expect(generatedCondition).toContain(`$${association}.USERNAME$`);
+  });
+
+  it.each([
+    ['COST_CENTER_DESC', 'COST_CENTER_DESC'],
+    ['BU', 'BU'],
+    ['DEPARTMENT', 'DEPARTMENT'],
+  ])('applies the %s cost-center filter on its include', async (filterKey, field) => {
+    const findAndCountAll = jest.fn().mockResolvedValue({ rows: [], count: 0 });
+    getModels.mockReturnValue({ Employee: { findAndCountAll }, User: {}, CostCenterMapping: {}, UserRole: {}, Role: {} });
+
+    await userService.listUsers({ page: '1', pageSize: '25', [filterKey]: 'sample' });
+
+    const userInclude = findAndCountAll.mock.calls[0][0].include.find((include) => include.as === 'user');
+    const costCenterInclude = userInclude.include.find((include) => include.as === 'costCenter');
+    expect(costCenterInclude.required).toBe(true);
+    expect(costCenterInclude.where).toEqual({ [field]: { [Op.like]: '%sample%' } });
+  });
+
+  it('generates valid MSSQL aliases for nested user filters', async () => {
+    const sequelize = new Sequelize('user-filter-test', 'user', 'password', {
+      dialect: 'mssql',
+      logging: false,
+    });
+
+    try {
+      const models = actualModelRegistry.initModels(sequelize);
+      models.Employee.findAndCountAll = jest.fn(async (options) => {
+        const queryOptions = { ...options, model: models.Employee };
+        models.Employee._validateIncludedElements(queryOptions);
+        const sql = sequelize.dialect.queryGenerator.selectQuery(
+          models.Employee.getTableName(),
+          queryOptions,
+          models.Employee,
+        );
+        expect(sql).toContain('[user->costCenter].[BU]');
+        expect(sql).not.toContain('[user->costCenter.BU]');
+        return { rows: [], count: 0 };
+      });
+      getModels.mockReturnValue(models);
+
+      await userService.listUsers({
+        page: '1',
+        pageSize: '25',
+        BU: 'Business',
+        ROLES: 'Credit',
+        UPDATED_BY: 'NUC-nuttapongc',
+        MANAGER_1: 'MGR',
+        SYSTEM_ACTIVE: '1',
+        UPDATED_DATE: '2026-11-12',
+      });
+    } finally {
+      await sequelize.close();
     }
+  });
+
+  it('filters role names through a separate join without trimming displayed roles', async () => {
+    const findAndCountAll = jest.fn().mockResolvedValue({ rows: [], count: 0 });
+    getModels.mockReturnValue({ Employee: { findAndCountAll }, User: {}, CostCenterMapping: {}, UserRole: {}, Role: {} });
+
+    await userService.listUsers({ page: '1', pageSize: '25', ROLES: 'Credit' });
+
+    const userInclude = findAndCountAll.mock.calls[0][0].include.find((include) => include.as === 'user');
+    const displayedRolesInclude = userInclude.include.find((include) => include.as === 'userRoles');
+    const roleFilterInclude = userInclude.include.find((include) => include.as === 'userRolesFilter');
+    expect(displayedRolesInclude.required).toBe(false);
+    expect(displayedRolesInclude.where).toBeUndefined();
+    expect(roleFilterInclude.required).toBe(true);
+    expect(roleFilterInclude.where.ENABLED[Op.in]).toContain('1');
+    expect(roleFilterInclude.include[0].where).toEqual({ NAME: { [Op.like]: '%Credit%' } });
+  });
+
+  it.each([
+    ['1', ['1', 1, true]],
+    ['0', ['0', 0, false]],
+  ])('filters system access status %s', async (value, enabledValues) => {
+    const findAndCountAll = jest.fn().mockResolvedValue({ rows: [], count: 0 });
+    getModels.mockReturnValue({ Employee: { findAndCountAll }, User: {}, CostCenterMapping: {}, UserRole: {}, Role: {} });
+
+    await userService.listUsers({ page: '1', pageSize: '25', SYSTEM_ACTIVE: value });
+
+    const userInclude = findAndCountAll.mock.calls[0][0].include.find((include) => include.as === 'user');
+    expect(userInclude.where[Op.and]).toContainEqual({
+      ENABLED: { [Op.in]: enabledValues },
+    });
+  });
+
+  it.each([
+    ['USER', 'Employee'],
+    ['MANAGER_1', 'manager1'],
+  ])('matches the displayed INITIALS-USERNAME value for %s', async (filterKey, association) => {
+    const findAndCountAll = jest.fn().mockResolvedValue({ rows: [], count: 0 });
+    getModels.mockReturnValue({ Employee: { findAndCountAll }, User: {}, CostCenterMapping: {}, UserRole: {}, Role: {} });
+
+    await userService.listUsers({ page: '1', pageSize: '25', [filterKey]: 'NUC-nuttapongc' });
+
+    const options = findAndCountAll.mock.calls[0][0];
+    const identityCondition = filterKey === 'USER'
+      ? options.where[Op.and].find((condition) => condition[Op.and])
+      : options.include.find((include) => include.as === association).where;
+    expect(identityCondition[Op.and]).toEqual([
+      { INITIALS: { [Op.like]: '%NUC%' } },
+      { USERNAME: { [Op.like]: '%nuttapongc%' } },
+    ]);
   });
 
   it('filters users by each live presence status before pagination', async () => {

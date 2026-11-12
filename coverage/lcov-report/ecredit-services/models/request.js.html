@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">66.66% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/3</span>
+                <span class='fraction'>2/3</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">66.66% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/3</span>
+                <span class='fraction'>2/3</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -173,10 +173,21 @@
 <a name='L108'></a><a href='#L108'>108</a>
 <a name='L109'></a><a href='#L109'>109</a>
 <a name='L110'></a><a href='#L110'>110</a>
-<a name='L111'></a><a href='#L111'>111</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L111'></a><a href='#L111'>111</a>
+<a name='L112'></a><a href='#L112'>112</a>
+<a name='L113'></a><a href='#L113'>113</a>
+<a name='L114'></a><a href='#L114'>114</a>
+<a name='L115'></a><a href='#L115'>115</a>
+<a name='L116'></a><a href='#L116'>116</a>
+<a name='L117'></a><a href='#L117'>117</a>
+<a name='L118'></a><a href='#L118'>118</a>
+<a name='L119'></a><a href='#L119'>119</a>
+<a name='L120'></a><a href='#L120'>120</a>
+<a name='L121'></a><a href='#L121'>121</a>
+<a name='L122'></a><a href='#L122'>122</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -283,9 +294,20 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { DataTypes } = <span class="cstat-no" title="statement not covered" >require('sequelize');</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { DataTypes } = require('sequelize');
 &nbsp;
-<span class="cstat-no" title="statement not covered" >module.exports = <span class="fstat-no" title="function not covered" >(s</span>equelize) =&gt;</span>
+module.exports = <span class="fstat-no" title="function not covered" >(s</span>equelize) =&gt;
 <span class="cstat-no" title="statement not covered" >  sequelize.define(</span>
     'Request',
     {
@@ -306,6 +328,7 @@
       BDS_NOTES: DataTypes.TEXT,
       CRM_ID: DataTypes.STRING,
       CRM_NO: DataTypes.STRING,
+      SOLD_ID: DataTypes.STRING(50),
       SOLD_TO: DataTypes.STRING,
       CUSTOMER_TAX_NO: DataTypes.STRING,
       CUSTOMER_PHONE: DataTypes.STRING,
@@ -319,7 +342,7 @@
       CUSTOMER_CUSTOMER_TYPE_EXTER: DataTypes.TEXT,
       CUSTOMER_SHAREHOLDERS: DataTypes.TEXT,
       CUSTOMER_DIRECTORS: DataTypes.TEXT,
-      CUSTOMER_ADDRESS: DataTypes.STRING,
+      CUSTOMER_ADDRESS: DataTypes.TEXT,
       DESCRIPTION: DataTypes.STRING,
       SEARCH_TERM: DataTypes.STRING,
       EXISTING_RATING_ID: DataTypes.STRING,
@@ -350,6 +373,10 @@
       IS_PERMANENT_PROPOSED: DataTypes.BOOLEAN,
       IS_TEMPORARY_PROPOSED: DataTypes.BOOLEAN,
       STATUS_ID: DataTypes.STRING,
+      STATUS_SAP_ID: {
+        type: DataTypes.STRING,
+        defaultValue: '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b',
+      },
       SUBMITTED_BY: DataTypes.INTEGER,
       SUBMITTED_DATE: DataTypes.DATE,
       PROPOSED_DISPLAYED_NOTES: DataTypes.TEXT,
@@ -386,6 +413,12 @@
       PROPOSED_BANK_GUARANTEE_AMOUNT: DataTypes.DECIMAL(18, 4),
       IS_CASH_DEPOSIT_PROPOSED: DataTypes.BOOLEAN,
       PROPOSED_CASH_DEPOSIT_AMOUNT: DataTypes.DECIMAL(18, 4),
+      IS_CLEAR_OUTSTANDING_BALANCE_APPROVED: DataTypes.BOOLEAN,
+      IS_WITHIN_APPROVED_LIMIT_APPROVED: DataTypes.BOOLEAN,
+      IS_BANK_GUARANTEE_APPROVED: DataTypes.BOOLEAN,
+      APPROVED_BANK_GUARANTEE_AMOUNT: DataTypes.DECIMAL(18, 4),
+      IS_CASH_DEPOSIT_APPROVED: DataTypes.BOOLEAN,
+      APPROVED_CASH_DEPOSIT_AMOUNT: DataTypes.DECIMAL(18, 4),
       ENABLED: DataTypes.BOOLEAN,
     },
     {
@@ -400,7 +433,7 @@
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-17T04:17:03.608Z
+                at 2026-11-12T09:22:50.687Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

@@ -81,6 +81,7 @@ function initModels(sequelize) {
 
   // TB1 -> TB2 (USERS.ID = USER_ROLES.USER_ID), TB2 -> ROLES
   User.hasMany(UserRole, { as: 'userRoles', foreignKey: 'USER_ID', sourceKey: 'ID' });
+  User.hasMany(UserRole, { as: 'userRolesFilter', foreignKey: 'USER_ID', sourceKey: 'ID' });
   UserRole.belongsTo(Role, { as: 'role', foreignKey: 'ROLE_ID' });
 
   Request.belongsTo(Rating, { as: 'existingRating', foreignKey: 'EXISTING_RATING_ID' });

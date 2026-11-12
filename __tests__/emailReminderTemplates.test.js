@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const handlebars = require('handlebars');
 
-describe.each(['request-approval', 'request-backward', 'request-draft', 'request-final'])('%s reminder banner', (template) => {
+describe.each(['request-approval', 'request-backward', 'request-draft', 'request-final', 'request-temporary'])('%s reminder banner', (template) => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'templates', `${template}.hbs`), 'utf8');
   const render = handlebars.compile(source);
 
@@ -16,6 +16,23 @@ describe.each(['request-approval', 'request-backward', 'request-draft', 'request
       expect(html).toContain('REQ-001');
     }
   });
+
+  if (template === 'request-temporary') {
+    test('renders intended recipient details only in the non-production testing footer', () => {
+      const html = render({
+        showEmailDebugInfo: true,
+        emailDebugInfo: {
+          subject: '[DEV e-Credit] - Credit adjustment expiry reminder',
+          to: ['requester@example.com'],
+          cc: ['super@example.com'],
+        },
+      });
+      expect(html).toContain('Show for testing only.');
+      expect(html).toContain('requester@example.com');
+      expect(html).toContain('super@example.com');
+      expect(render({ showEmailDebugInfo: false })).not.toContain('Show for testing only.');
+    });
+  }
 
   test('keeps reminder styling in a dedicated CSS rule, not an inline span', () => {
     expect(source).toMatch(/\.reminder-banner\s*\{[^}]*color:\s*red;[^}]*font-family:\s*Verdana,\s*sans-serif;[^}]*font-size:\s*20pt;[^}]*font-weight:\s*bolder;/);
@@ -55,5 +72,20 @@ describe('Permanent Adjustment email values', () => {
     expect(valuesFor('request-completed', {
       finalConfirmedDetails: { permanentYes: true, validFrom: completedDate },
     })).toEqual([completedDate]);
+  });
+
+  test('request-temporary shows Effective and Expiry dates for enabled adjustment types', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'templates', 'request-temporary.hbs'), 'utf8');
+    const html = handlebars.compile(source)({
+      finalConfirmedDetails: {
+        temporaryYes: true, permanentYes: true, validFrom: '01 Sep 2026', validTo: '31 Dec 2026',
+      },
+    });
+    expect(html).toContain('<td class="label">Temporary Effective Date</td>');
+    expect(html).toContain('<td class="label">Temporary Expiry Date</td>');
+    expect(html).toContain('<td class="label">Permanent Effective Date</td>');
+    expect(html).toContain('<td class="label">Permanent Expiry Date</td>');
+    expect(html).toContain('31 Dec 2026');
+    expect(html).not.toContain('Completed');
   });
 });
