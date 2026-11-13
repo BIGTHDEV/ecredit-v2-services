@@ -64,14 +64,6 @@
         font-weight: bold;
     }
 
-    .reminder-banner {
-        margin: 0 0 18px;
-        color: red;
-        font-family: Verdana, sans-serif;
-        font-size: 20pt;
-        font-weight: bolder;
-    }
-
     .intro {
         margin: 0 0 26px;
         color: #52665d;
@@ -349,10 +341,7 @@
                 </tr>
                 <tr>
                     <td class="email-content">
-                        <p class="greeting">Dear Credit Team,</p>
-                        {{#if isReminder}}
-                        <p class="reminder-banner">Reminder!!</p>
-                        {{/if}}
+                        <p class="greeting">Dear {{dear}},</p>
                         <p class="intro">Please review the credit request details below.</p>
 
                         <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
@@ -386,25 +375,21 @@
                                 <td class="label">Sales Group</td>
                                 <td class="value">{{salesGroup}}</td>
                             </tr>
+                        </table>
+
+                        <p class="section-title">Request from BAE</p>
+                        <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
                             <tr>
-                                <td class="label">Business Type (Sold-To Industry)</td>
-                                <td class="value">{{businessType}}</td>
+                                <td class="label">Request Type</td>
+                                <td class="value">{{requestType}}</td>
                             </tr>
                             <tr>
-                                <td class="label">Customer Type (External)</td>
-                                <td class="value">{{customerType}}</td>
+                                <td class="label">Request Reason</td>
+                                <td class="value">{{requestReason}}</td>
                             </tr>
                             <tr>
-                                <td class="label">Company Register Date</td>
-                                <td class="value">{{companyRegisterDate}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Registered Capital (THB)</td>
-                                <td class="value">{{registeredCapital}}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Company Size</td>
-                                <td class="value">{{companySize}}</td>
+                                <td class="label">BAE Remark</td>
+                                <td class="value">{{baeRemark}}</td>
                             </tr>
                         </table>
 
@@ -432,84 +417,6 @@
                                 <td>-</td>
                             </tr>
                         </table>
-
-                        <p class="section-title">Credit Rating Scoring</p>
-                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                            style="border: 1px solid #d6e6da;">
-                            <tr>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #fafdfb; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Profitability</span><br>
-                                    <span
-                                        style="color: #009a49; font-size: 22px; font-weight: bold; line-height: 1.6;">{{profitability}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #fafdfb; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Growth</span><br>
-                                    <span
-                                        style="color: #009a49; font-size: 22px; font-weight: bold; line-height: 1.6;">{{growth}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #fafdfb; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Liquidity</span><br>
-                                    <span
-                                        style="color: #009a49; font-size: 22px; font-weight: bold; line-height: 1.6;">{{liquidity}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; background-color: #fafdfb; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Leverage</span><br>
-                                    <span
-                                        style="color: #009a49; font-size: 22px; font-weight: bold; line-height: 1.6;">{{leverage}}</span>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #edf7f1; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Existing</span><br>
-                                    <span
-                                        style="color: #e67e22; font-size: 22px; font-weight: bold; line-height: 1.6;">{{existingProfitability}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #edf7f1; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Existing</span><br>
-                                    <span
-                                        style="color: #e67e22; font-size: 22px; font-weight: bold; line-height: 1.6;">{{existingGrowth}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; border-right: 1px solid #d6e6da; background-color: #edf7f1; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Existing</span><br>
-                                    <span
-                                        style="color: #e67e22; font-size: 22px; font-weight: bold; line-height: 1.6;">{{existingLiquidity}}</span>
-                                </td>
-                                <td width="25%" align="center" valign="top"
-                                    style="padding: 12px 8px; background-color: #edf7f1; color: #284534;">
-                                    <span style="font-size: 12px; font-weight: bold;">Existing</span><br>
-                                    <span
-                                        style="color: #e67e22; font-size: 22px; font-weight: bold; line-height: 1.6;">{{existingLeverage}}</span>
-                                </td>
-                            </tr>
-                        </table>
-
-                        {{#if showScoringClassification}}
-                        <p class="section-title">Special Rating Score Conditions</p>
-                        <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                            <tr>
-                                <td class="label">Condition</td>
-                                <td class="value">
-                                    {{#if scoringClassificationNa}}N/A{{/if}}
-                                    {{#if scoringClassificationGovernment}}{{#if
-                                    scoringClassificationNa}}<br>{{/if}}Government Hospital &amp; Institution &amp;
-                                    Education{{/if}}
-                                    {{#if scoringClassificationOthers}}{{#if scoringClassificationNa}}<br>{{/if}}{{#if
-                                    scoringClassificationGovernment}}<br>{{/if}}Others{{/if}}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td class="label">Comment</td>
-                                <td class="value">{{{scoringNotes}}}</td>
-                            </tr>
-                        </table>
-                        {{/if}}
 
                         <p style="margin: 26px 0 4px;">You can access to this request by following
                             <a href="{{link}}" target="_blank" style="color: #009a49; font-weight: bold;">

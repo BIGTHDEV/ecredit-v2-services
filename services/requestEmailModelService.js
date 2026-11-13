@@ -209,6 +209,21 @@ function emptyCreditDetailsMovement() {
   };
 }
 
+function compareCreditDetails(recommendation, action) {
+  if (!action) return {};
+  const changes = {};
+  [
+    'creditLimit', 'creditTerm', 'creditRating', 'clearOutstandingBalanceYes',
+    'withinApprovedLimitYes', 'bankGuaranteeAmount', 'cashDepositAmount', 'permanentYes',
+  ].forEach((key) => {
+    changes[key] = recommendation[key] !== action[key];
+  });
+  changes.temporaryYes = recommendation.temporaryYes !== action.temporaryYes
+    || (recommendation.temporaryYes && action.temporaryYes
+      && (recommendation.validFrom !== action.validFrom || recommendation.validTo !== action.validTo));
+  return changes;
+}
+
 function mapRequestToEmailModel(request, dear = '-', approvalHistory = []) {
   if (!request) throw new Error('Request was not found.');
 
@@ -233,6 +248,23 @@ function mapRequestToEmailModel(request, dear = '-', approvalHistory = []) {
   const hideLastActionedDetails = Boolean(
     lastActionedStep && /BDS|Review/i.test(String(lastActionedStep.approverType || ''))
   );
+  const creditTeamRecommendation = {
+    creditLimit: formatMoney(request.PROPOSED_LIMIT_AMOUNT),
+    creditTerm: valueOrDash(request.proposedTerm?.NAME),
+    creditRating: valueOrDash(request.proposedRating?.NAME),
+    clearOutstandingBalanceYes: clearOutstandingBalance,
+    withinApprovedLimitYes: withinApprovedLimit,
+    bankGuaranteeAmount: formatMoney(request.PROPOSED_BANK_GUARANTEE_AMOUNT),
+    cashDepositAmount: formatMoney(request.PROPOSED_CASH_DEPOSIT_AMOUNT),
+    temporaryYes: isEnabled(request.IS_TEMPORARY_PROPOSED),
+    permanentYes: isEnabled(request.IS_PERMANENT_PROPOSED),
+    validFrom: formatAdjustmentDate(request.PROPOSED_VALID_FROM),
+    validTo: formatAdjustmentDate(request.PROPOSED_VALID_TO),
+  };
+  const approvalChanges = hideLastActionedDetails
+    ? {} : compareCreditDetails(creditTeamRecommendation, lastActionedStep);
+  const finalApprovalChanges = hideLastActionedDetails
+    ? {} : compareCreditDetails(creditTeamRecommendation, finalActionedStep);
   const finalConfirmedDetails = {
     comment: valueOrDash(request.APPROVED_NOTES),
     creditTerm: valueOrDash(request.approvedTerm?.NAME),
@@ -316,6 +348,9 @@ function mapRequestToEmailModel(request, dear = '-', approvalHistory = []) {
     finalConfirmedDetails,
     creditDetailsMovements,
     creditDetailsSummary: mapCreditDetailsSummary(creditDetailsMovements, currentStep, lastActionedStep),
+    creditTeamRecommendation,
+    approvalChanges,
+    finalApprovalChanges,
     suggestedCreditDetails: suggestedCreditDetails ? {
       creditTerm: suggestedCreditDetails.creditTerm,
       creditLimit: suggestedCreditDetails.creditLimit,

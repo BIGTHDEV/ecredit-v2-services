@@ -40,38 +40,45 @@ describe.each(['request-approval', 'request-backward', 'request-draft', 'request
   });
 });
 
+test('keeps Final and Rejected email subtitles in their brand headers', () => {
+  const sourceFor = (template) => fs.readFileSync(path.join(__dirname, '..', 'templates', `${template}.hbs`), 'utf8');
+  const finalHeader = sourceFor('request-final').match(/<tr class="brand-header">([\s\S]*?)<\/tr>/)?.[1];
+  const rejectedHeader = sourceFor('request-rejected').match(/<tr class="brand-header">([\s\S]*?)<\/tr>/)?.[1];
+
+  expect(finalHeader).toContain('<p class="brand-subtitle">Credit request summary and final approval details</p>');
+  expect(finalHeader).not.toContain('finalConfirmedDetails.permanentYes');
+  expect(rejectedHeader).toContain('<p class="brand-subtitle">Credit request summary and rejection details</p>');
+});
+
 describe('Permanent Adjustment email values', () => {
   const completedDate = '2030-12-31';
-  const valuesFor = (template, model) => {
+  const permanentAdjustmentRow = (template, model) => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'templates', `${template}.hbs`), 'utf8');
     const html = handlebars.compile(source)(model);
-    return [...html.matchAll(/<td class="label">Permanent Adjustment<\/td>\s*<td class="value">([\s\S]*?)<\/td>/g)]
-      .map(([, value]) => value.trim());
+    return html.match(/<td>Permanent Adjustment<\/td>([\s\S]*?)<\/tr>/)?.[1] || '';
   };
 
   test.each([
-    ['request-approval', {
-      suggestedCreditDetails: { permanentYes: true, validFrom: completedDate },
-      lastActionedStep: { permanentYes: true, validFrom: completedDate },
-    }, 2],
     ['request-final', {
-      suggestedCreditDetails: { permanentYes: true, validFrom: completedDate },
-      finalActionedStep: { permanentYes: true, validFrom: completedDate },
-    }, 2],
+      creditTeamRecommendation: { permanentYes: true },
+      finalApprovalChanges: { permanentYes: false },
+      finalActionedStep: { permanentYes: true },
+    }],
     ['request-rejected', {
-      suggestedCreditDetails: { permanentYes: true, validFrom: completedDate },
-      lastActionedStep: { permanentYes: true, validFrom: completedDate },
-    }, 2],
-  ])('%s shows a checkmark instead of the date', (template, model, expectedRows) => {
-    expect(valuesFor(template, model)).toEqual(
-      Array(expectedRows).fill('<span class="status-yes">&#10003;</span>'),
-    );
+      creditTeamRecommendation: { permanentYes: true },
+      approvalChanges: { permanentYes: false },
+      lastActionedStep: { permanentYes: true },
+    }],
+  ])('%s shows checkmarks in the comparison instead of dates', (template, model) => {
+    expect(permanentAdjustmentRow(template, model).match(/<span class="status-yes">&#10003;<\/span>/g)).toHaveLength(2);
   });
 
   test('request-completed keeps the Permanent Adjustment date', () => {
-    expect(valuesFor('request-completed', {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'templates', 'request-completed.hbs'), 'utf8');
+    const html = handlebars.compile(source)({
       finalConfirmedDetails: { permanentYes: true, validFrom: completedDate },
-    })).toEqual([completedDate]);
+    });
+    expect(html).toContain(`<td class="value">${completedDate}</td>`);
   });
 
   test('request-temporary shows Effective and Expiry dates for enabled adjustment types', () => {

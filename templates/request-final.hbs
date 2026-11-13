@@ -344,8 +344,8 @@
                 <tr class="brand-header">
                     <td>
                         <p class="brand-name">e-Credit System</p>
-                    <td class="value">{{#if finalConfirmedDetails.permanentYes}}<span
-                            class="status-yes">&#10003;</span>{{else}}-{{/if}}</td>
+                        <p class="brand-subtitle">Credit request summary and final approval details</p>
+                    </td>
         </td>
     </tr>
     <tr>
@@ -439,49 +439,6 @@
                 </tr>
             </table>
 
-            <p class="section-title">Credit Adjustment</p>
-            <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
-
-                <tr>
-                    <td class="label">Temporary Adjustment</td>
-                    <td class="value">{{#if
-                        suggestedCreditDetails.temporaryYes}}{{suggestedCreditDetails.validFrom}} -
-                        {{suggestedCreditDetails.validTo}}{{else}}-{{/if}}</td>
-                </tr>
-                <tr>
-                    <td class="label">Permanent Adjustment</td>
-                    <td class="value">{{#if
-                        suggestedCreditDetails.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}
-                    </td>
-                </tr>
-            </table>
-
-            {{#if showAdditionalConditions}}
-            <p class="section-title">Additional Conditions</p>
-            <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
-
-                <tr>
-                    <td class="label">Clear outstanding balance</td>
-                    <td class="value">{{#if clearOutstandingBalance}}<span
-                            class="status-yes">&#10003;</span>{{else}}<span class="status-no">&#10007;</span>{{/if}}
-                    </td>
-                </tr>
-                <tr>
-                    <td class="label">Limit credit used to not exceed approved</td>
-                    <td class="value">{{#if withinApprovedLimit}}<span class="status-yes">&#10003;</span>{{else}}<span
-                            class="status-no">&#10007;</span>{{/if}}</td>
-                </tr>
-                <tr>
-                    <td class="label">Bank guarantee</td>
-                    <td class="value">{{amountBank}}</td>
-                </tr>
-                <tr>
-                    <td class="label">Cash deposit</td>
-                    <td class="value">{{amountDeposit}}</td>
-                </tr>
-            </table>
-            {{/if}}
-
             <p class="section-title">Credit Rating Scoring</p>
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
                 style="border: 1px solid #d6e6da;">
@@ -560,12 +517,75 @@
             </table>
             {{/if}}
 
-            <p class="section-title">Credit Team Recommendation</p>
+            <p class="section-title">Credit Team Recommendation and Latest Approval</p>
+            <table class="credit-detail-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                    <th>Detail</th>
+                    <th>Credit Team Recommendation</th>
+                    {{#unless hideLastActionedDetails}}
+                    <th style="background-color: #f5a900; color: #17212b;">
+                        Latest Approval Action by {{finalActionedStep.approver}}<br>
+                        <span style="font-size: 11px;">This column displays the information that will be used for approval if no changes are required.</span>
+                    </th>
+                    {{/unless}}
+                </tr>
+                <tr>
+                    <td>Credit Limit</td>
+                    <td>{{creditTeamRecommendation.creditLimit}}</td>
+                    {{#unless hideLastActionedDetails}}<td><span{{#if finalApprovalChanges.creditLimit}} style="background-color: #ffeb3b;"{{/if}}>{{finalActionedStep.creditLimit}}</span></td>{{/unless}}
+                </tr>
+                <tr>
+                    <td>Credit Term</td>
+                    <td>{{creditTeamRecommendation.creditTerm}}</td>
+                    {{#unless hideLastActionedDetails}}<td><span{{#if finalApprovalChanges.creditTerm}} style="background-color: #ffeb3b;"{{/if}}>{{finalActionedStep.creditTerm}}</span></td>{{/unless}}
+                </tr>
+                <tr>
+                    <td>Credit Rating</td>
+                    <td>{{creditTeamRecommendation.creditRating}}</td>
+                    {{#unless hideLastActionedDetails}}<td><span{{#if finalApprovalChanges.creditRating}} style="background-color: #ffeb3b;"{{/if}}>{{finalActionedStep.creditRating}}</span></td>{{/unless}}
+                </tr>
+                <tr>
+                    <td>Clear outstanding balance</td>
+                    <td>{{#if creditTeamRecommendation.clearOutstandingBalanceYes}}<span class="status-yes">&#10003;</span>{{else}}<span class="status-no">&#10007;</span>{{/if}}</td>
+                    {{#unless hideLastActionedDetails}}<td><span{{#if finalApprovalChanges.clearOutstandingBalanceYes}} style="background-color: #ffeb3b;"{{/if}}>{{#if finalActionedStep.clearOutstandingBalanceYes}}<span class="status-yes">&#10003;</span>{{else}}<span class="status-no">&#10007;</span>{{/if}}</span></td>{{/unless}}
+                </tr>
+                <tr>
+                    <td>Limit credit used to not exceed approved</td>
+                    <td>{{#if creditTeamRecommendation.withinApprovedLimitYes}}<span class="status-yes">&#10003;</span>{{else}}<span class="status-no">&#10007;</span>{{/if}}</td>
+                    {{#unless hideLastActionedDetails}}<td><span{{#if finalApprovalChanges.withinApprovedLimitYes}} style="background-color: #ffeb3b;"{{/if}}>{{#if finalActionedStep.withinApprovedLimitYes}}<span class="status-yes">&#10003;</span>{{else}}<span class="status-no">&#10007;</span>{{/if}}</span></td>{{/unless}}
+                </tr>
+                <tr>
+                    <td>Bank guarantee</td>
+                    <td>{{creditTeamRecommendation.bankGuaranteeAmount}}</td>
+                    {{#unless hideLastActionedDetails}}<td><span{{#if finalApprovalChanges.bankGuaranteeAmount}} style="background-color: #ffeb3b;"{{/if}}>{{finalActionedStep.bankGuaranteeAmount}}</span></td>{{/unless}}
+                </tr>
+                <tr>
+                    <td>Cash deposit</td>
+                    <td>{{creditTeamRecommendation.cashDepositAmount}}</td>
+                    {{#unless hideLastActionedDetails}}<td><span{{#if finalApprovalChanges.cashDepositAmount}} style="background-color: #ffeb3b;"{{/if}}>{{finalActionedStep.cashDepositAmount}}</span></td>{{/unless}}
+                </tr>
+                <tr>
+                    <td>Temporary Adjustment</td>
+                    <td>{{#if creditTeamRecommendation.temporaryYes}}{{creditTeamRecommendation.validFrom}} - {{creditTeamRecommendation.validTo}}{{else}}-{{/if}}</td>
+                    {{#unless hideLastActionedDetails}}<td><span{{#if finalApprovalChanges.temporaryYes}} style="background-color: #ffeb3b;"{{/if}}>{{#if finalActionedStep.temporaryYes}}{{finalActionedStep.validFrom}} - {{finalActionedStep.validTo}}{{else}}-{{/if}}</span></td>{{/unless}}
+                </tr>
+                <tr>
+                    <td>Permanent Adjustment</td>
+                    <td>{{#if creditTeamRecommendation.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}</td>
+                    {{#unless hideLastActionedDetails}}<td><span{{#if finalApprovalChanges.permanentYes}} style="background-color: #ffeb3b;"{{/if}}>{{#if finalActionedStep.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}</span></td>{{/unless}}
+                </tr>
+            </table>
             <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
-                    <td class="label">Comment</td>
+                    <td class="label">Credit Team Comment</td>
                     <td class="value">{{{opinion}}}</td>
                 </tr>
+                {{#unless hideLastActionedDetails}}
+                <tr>
+                    <td class="label">Comment from latest approval</td>
+                    <td class="value">{{{finalActionedStep.comment}}}</td>
+                </tr>
+                {{/unless}}
             </table>
 
             <p class="section-title">Summary All Steps</p>
@@ -584,68 +604,16 @@
                     <td>{{stepName}}</td>
                     <td>{{approver}}</td>
                     <td>{{status}}</td>
-    </tr>
-    {{/each}}
-</table>
-{{else}}
-<table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
-    <tr>
-        <td class="value">No approval steps are available.</td>
-    </tr>
-</table>
-{{/if}}
-
-{{#unless hideLastActionedDetails}}
-<p class="section-title">Latest Approval Action by {{finalActionedStep.approver}}</p>
-<table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
-    <tr>
-        <td class="label">Comment</td>
-        <td class="value">{{{finalActionedStep.comment}}}</td>
-    </tr>
-    <tr>
-        <td class="label">Credit Limit</td>
-        <td class="value">{{finalActionedStep.creditLimit}}</td>
-    </tr>
-    <tr>
-        <td class="label">Credit Term</td>
-        <td class="value">{{finalActionedStep.creditTerm}}</td>
-    </tr>
-    <tr>
-        <td class="label">Credit Rating</td>
-        <td class="value">{{finalActionedStep.creditRating}}</td>
-    </tr>
-    <tr>
-        <td class="label">Clear outstanding balance</td>
-        <td class="value">{{#if finalActionedStep.clearOutstandingBalanceYes}}<span
-                class="status-yes">&#10003;</span>{{else}}<span class="status-no">&#10007;</span>{{/if}}
-        </td>
-    </tr>
-    <tr>
-        <td class="label">Limit credit used to not exceed approved</td>
-        <td class="value">{{#if finalActionedStep.withinApprovedLimitYes}}<span
-                class="status-yes">&#10003;</span>{{else}}<span class="status-no">&#10007;</span>{{/if}}
-        </td>
-    </tr>
-    <tr>
-        <td class="label">Bank guarantee</td>
-        <td class="value">{{finalActionedStep.bankGuaranteeAmount}}</td>
-    </tr>
-    <tr>
-        <td class="label">Cash deposit</td>
-        <td class="value">{{finalActionedStep.cashDepositAmount}}</td>
-    </tr>
-    <tr>
-        <td class="label">Temporary Adjustment</td>
-        <td class="value">{{#if finalActionedStep.temporaryYes}}{{finalActionedStep.validFrom}} -
-            {{finalActionedStep.validTo}}{{else}}-{{/if}}</td>
-    </tr>
-    <tr>
-        <td class="label">Permanent Adjustment</td>
-        <td class="value">{{#if
-            finalActionedStep.permanentYes}}<span class="status-yes">&#10003;</span>{{else}}-{{/if}}</td>
-    </tr>
-</table>
-{{/unless}}
+                </tr>
+                {{/each}}
+            </table>
+            {{else}}
+            <table class="info-table" role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                    <td class="value">No approval steps are available.</td>
+                </tr>
+            </table>
+            {{/if}}
 {{#if approvalActions.length}}
 <p class="section-title">&nbsp;</p>
 <table class="MsoNormalTable" role="presentation" border="0" cellspacing="0" cellpadding="0"

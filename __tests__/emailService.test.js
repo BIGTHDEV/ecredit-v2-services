@@ -103,6 +103,56 @@ describe('emailService', () => {
       expect(transporter.sendMail).not.toHaveBeenCalled();
     });
 
+    test.each([
+      [true, true, 'Term, Limit, Rating'],
+      [1, 0, 'Term, Rating'],
+      [false, 1, 'Limit, Rating'],
+      [0, false, 'Rating'],
+      ['1', 'true', 'Term, Limit, Rating'],
+      ['0', 'false', 'Rating'],
+      [null, undefined, 'Rating'],
+    ])('renders current draft request details for term %p and limit %p', async (term, limit, requestType) => {
+      query.mockReset()
+        .mockResolvedValueOnce([{ CURRENT_EMAIL: 'credit@example.com;' }])
+        .mockResolvedValueOnce([{
+          CURRENT_EMAIL: 'requester@example.com',
+          IS_TERM_REQUESTED: term,
+          IS_LIMIT_REQUESTED: limit,
+          DESCRIPTION: 'Request reason',
+          REQUESTED_NOTES: 'BAE remark',
+        }]);
+      const transporter = createTransporter();
+      await createEmailService({ environment: 'prd', transporter }).sendEmail({
+        template: 'request-draft', subject: 'Draft', requestId: 'request-1',
+        model: { requestType: 'Old type', requestReason: 'Old reason', baeRemark: 'Old remark' },
+      });
+
+      const sent = transporter.sendMail.mock.calls[0][0];
+      expect(sent.context).toEqual(expect.objectContaining({
+        requestType, requestReason: 'Request reason', baeRemark: 'BAE remark',
+      }));
+      const fs = require('fs');
+      const path = require('path');
+      const handlebars = require('handlebars');
+      const html = handlebars.compile(fs.readFileSync(path.join(__dirname, '..', 'templates', 'request-draft.hbs'), 'utf8'))(sent.context);
+      expect(html.match(new RegExp(`<td class="value">${requestType}</td>`, 'g'))).toHaveLength(2);
+      expect(html).toContain('<td class="value">Request reason</td>');
+      expect(html).toContain('<td class="value">BAE remark</td>');
+    });
+
+    test('renders missing draft reason and remark as dashes', async () => {
+      query.mockReset()
+        .mockResolvedValueOnce([{ CURRENT_EMAIL: 'credit@example.com;' }])
+        .mockResolvedValueOnce([{ CURRENT_EMAIL: 'requester@example.com', DESCRIPTION: null, REQUESTED_NOTES: '' }]);
+      const transporter = createTransporter();
+      await createEmailService({ environment: 'prd', transporter }).sendEmail({
+        template: 'request-draft', subject: 'Draft', requestId: 'request-1', model: {},
+      });
+      expect(transporter.sendMail.mock.calls[0][0].context).toEqual(expect.objectContaining({
+        requestType: 'Rating', requestReason: '-', baeRemark: '-',
+      }));
+    });
+
     test('requires the request identity and propagates database failures', async () => {
       const transporter = createTransporter();
       const service = createEmailService({ environment: 'prd', transporter });

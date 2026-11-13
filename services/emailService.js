@@ -149,7 +149,8 @@ async function resolveDraftRecipients(requestId, transaction) {
     transaction,
   });
   const requesters = await database.query(`
-    SELECT TB2.INITIALS, LOWER(TB2.CURRENT_EMAIL) AS CURRENT_EMAIL
+    SELECT TB2.INITIALS, LOWER(TB2.CURRENT_EMAIL) AS CURRENT_EMAIL,
+      TB1.IS_TERM_REQUESTED, TB1.IS_LIMIT_REQUESTED, TB1.DESCRIPTION, TB1.REQUESTED_NOTES
     FROM REQUESTS AS TB1
     LEFT JOIN S_EMPLOYEE1 AS TB2 ON TB1.REQUESTED_BY = TB2.EMP_CODE
     WHERE TB1.ENABLED = '1'
@@ -160,7 +161,21 @@ async function resolveDraftRecipients(requestId, transaction) {
   const cc = normalizeEmailList(requesters.map((requester) => requester.CURRENT_EMAIL).filter(Boolean), 'draft.cc');
   if (!to.length) throw new Error('No Credit Team email recipients were found for request-draft email.');
   if (!cc.length) throw new Error('No requester email recipient was found for request-draft email.');
-  return { to, cc };
+  const request = requesters[0];
+  const isRequested = (value) => [true, 1, '1', 'true'].includes(value);
+  const requestType = [
+    ...(isRequested(request.IS_TERM_REQUESTED) ? ['Term'] : []),
+    ...(isRequested(request.IS_LIMIT_REQUESTED) ? ['Limit'] : []),
+    'Rating',
+  ].join(', ');
+  return {
+    recipients: { to, cc },
+    requestDetails: {
+      requestType,
+      requestReason: request.DESCRIPTION,
+      baeRemark: request.REQUESTED_NOTES,
+    },
+  };
 }
 
 function createEmailService({ environment = config.environment, bcc = config.email.bcc, transporter } = {}) {
@@ -171,10 +186,11 @@ function createEmailService({ environment = config.environment, bcc = config.ema
 
     const resolvedTemplate = resolveTemplate(template);
     if (resolvedTemplate === 'request-draft') {
-      recipients = await resolveDraftRecipients(requestId, transaction);
+      const draft = await resolveDraftRecipients(requestId, transaction);
+      recipients = draft.recipients;
       intendedRecipients = recipients;
       effectiveRecipients = undefined;
-      model = { ...model, dear: 'Credit Team' };
+      model = { ...model, ...draft.requestDetails, dear: 'Credit Team' };
     }
     const resolveActorEmail = normalizedEnvironment === 'prd' ? actorEmail
       : (deliveryEmail || (user ? (user.profile?.LOGGED_IN_EMAIL || user.email) : actorEmail));

@@ -227,8 +227,140 @@ describe('requestEmailModelService', () => {
     expect(model.hideLastActionedDetails).toBe(false);
   });
 
+  test('renders approval differences against the credit team recommendation, not the pending step', () => {
+    const request = {
+      PROPOSED_LIMIT_AMOUNT: 7000000,
+      proposedTerm: { NAME: 'C045' },
+      proposedRating: { NAME: 'No Risk' },
+      IS_CLEAR_OUTSTANDING_BALANCE_PROPOSED: false,
+      IS_WITHIN_APPROVED_LIMIT_PROPOSED: true,
+      PROPOSED_BANK_GUARANTEE_AMOUNT: 0,
+      PROPOSED_CASH_DEPOSIT_AMOUNT: 1000000,
+      IS_TEMPORARY_PROPOSED: true,
+      IS_PERMANENT_PROPOSED: false,
+      PROPOSED_VALID_FROM: '2026-12-01',
+      PROPOSED_VALID_TO: '2027-02-28',
+      PROPOSED_DISPLAYED_NOTES: 'Credit team comment',
+    };
+    const history = [
+      { SORTING: 2, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Credit Team', APPROVAL_TYPE_NAME: 'Verified' },
+      {
+        SORTING: 3, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Manager', APPROVAL_TYPE_NAME: 'Approved',
+        APPROVER_NAME: 'WI', COMMENT: 'Latest comment', CREDIT_LIMIT: 6000000,
+        CREDIT_TERM: 'C060', CREDIT_RATING: 'No Risk', INCLUDED_CLEAR_OUTSTANDING_BALANCE: 'Yes',
+        INCLUDED_WITHIN_APPROVED_LIMIT: 'No', BANK_GUARANTEE_AMOUNT: 50, CASH_DEPOSIT_AMOUNT: 1000000,
+        TEMPORARY: 'Yes', PERMANENT: 'Yes', VALID_FROM: '01 Dec 2026, 12:00 AM', VALID_TO: '31 Jan 2027, 12:00 AM',
+      },
+      { SORTING: 4, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Manager', APPROVAL_TYPE_NAME: 'Pending', CREDIT_LIMIT: 1 },
+    ];
+    const model = mapRequestToEmailModel(request, 'Recipient', history);
+    expect(model.approvalChanges).toEqual({
+      creditLimit: true, creditTerm: true, creditRating: false, clearOutstandingBalanceYes: true,
+      withinApprovedLimitYes: true, bankGuaranteeAmount: true, cashDepositAmount: false,
+      temporaryYes: true, permanentYes: true,
+    });
+
+    const fs = require('fs');
+    const path = require('path');
+    const handlebars = require('handlebars');
+    const html = handlebars.compile(fs.readFileSync(path.join(__dirname, '..', 'templates', 'request-approval.hbs'), 'utf8'))(model);
+    const comparison = html.slice(html.indexOf('Credit Team Recommendation and Latest Approval'));
+    const row = (label) => comparison.match(new RegExp(`<tr>\\s*<td>${label}</td>([\\s\\S]*?)</tr>`))[1];
+    expect(row('Credit Limit')).toContain('<td>7,000,000.00</td>');
+    expect(row('Credit Limit')).toContain('style="background-color: #ffeb3b;">6,000,000.00');
+    expect(row('Credit Term')).toContain('style="background-color: #ffeb3b;">C060');
+    expect(row('Credit Rating')).not.toContain('background-color: #ffeb3b');
+    expect(row('Cash deposit')).not.toContain('background-color: #ffeb3b');
+    for (const label of ['Clear outstanding balance', 'Limit credit used to not exceed approved', 'Bank guarantee', 'Temporary Adjustment', 'Permanent Adjustment']) {
+      expect(row(label)).toContain('background-color: #ffeb3b');
+    }
+    expect(html).toContain('Latest Approval Action by WI');
+    expect(html).toContain('Credit team comment');
+    expect(html).toContain('Latest comment');
+    expect(html.indexOf('Summary All Steps')).toBeGreaterThan(html.indexOf('Comment from latest approval'));
+    expect(html).not.toContain('<p class="section-title">Credit Adjustment</p>');
+    expect(html).not.toContain('<p class="section-title">Additional Conditions</p>');
+  });
+
+  test.each([
+    ['request-final', 'Approved', 'finalActionedStep', 'finalApprovalChanges', 'Latest Approval Action by FINAL'],
+    ['request-rejected', 'Rejected', 'lastActionedStep', 'approvalChanges', 'Latest Rejection Action by REJECTOR'],
+  ])('renders the recommendation comparison and moves summary below the latest action in %s', (template, status, actionKey, changesKey, heading) => {
+    const model = mapRequestToEmailModel({
+      PROPOSED_LIMIT_AMOUNT: 7000000,
+      proposedTerm: { NAME: 'C045' },
+      proposedRating: { NAME: 'No Risk' },
+      PROPOSED_DISPLAYED_NOTES: 'Credit team comment',
+    }, '-', [
+      { SORTING: 1, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Requester', APPROVAL_TYPE_NAME: 'Requested' },
+      { SORTING: 2, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Credit Team', APPROVAL_TYPE_NAME: 'Verified' },
+      {
+        SORTING: 3, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Manager', APPROVAL_TYPE_NAME: status,
+        APPROVER_NAME: status === 'Approved' ? 'FINAL' : 'REJECTOR', COMMENT: 'Latest action comment',
+        CREDIT_LIMIT: 6000000, CREDIT_TERM: 'C060', CREDIT_RATING: 'No Risk',
+      },
+      ...(status === 'Approved' ? [{
+        SORTING: 4, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Manager', APPROVAL_TYPE_NAME: 'Pending',
+      }] : []),
+    ]);
+    const fs = require('fs');
+    const path = require('path');
+    const handlebars = require('handlebars');
+    const html = handlebars.compile(fs.readFileSync(path.join(__dirname, '..', 'templates', `${template}.hbs`), 'utf8'))(model);
+
+    expect(html).toContain(heading);
+    expect(html).toContain('style="background-color: #ffeb3b;">6,000,000.00');
+    expect(html).toContain('Credit team comment');
+    expect(html).toContain('Latest action comment');
+    expect(html.indexOf('Summary All Steps')).toBeGreaterThan(html.indexOf('Comment from latest'));
+    expect(html).not.toContain('<p class="section-title">Credit Adjustment</p>');
+    expect(html).not.toContain('<p class="section-title">Additional Conditions</p>');
+    expect(model[changesKey].creditLimit).toBe(true);
+    expect(model[actionKey].approver).toBe(status === 'Approved' ? 'FINAL' : 'REJECTOR');
+  });
+
+  test('does not highlight equal displayed values or inactive temporary dates', () => {
+    const model = mapRequestToEmailModel({
+      PROPOSED_LIMIT_AMOUNT: '7000000.00',
+      proposedTerm: { NAME: 'C045' },
+      proposedRating: { NAME: 'No Risk' },
+      PROPOSED_BANK_GUARANTEE_AMOUNT: 0,
+      PROPOSED_CASH_DEPOSIT_AMOUNT: 0,
+      PROPOSED_VALID_FROM: '2026-12-01',
+    }, '-', [
+      {
+        SORTING: 3, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Manager', APPROVAL_TYPE_NAME: 'Approved',
+        CREDIT_LIMIT: 7000000, CREDIT_TERM: 'C045', CREDIT_RATING: 'No Risk',
+        BANK_GUARANTEE_AMOUNT: '0.00', CASH_DEPOSIT_AMOUNT: 0, TEMPORARY: 'No',
+        VALID_FROM: '01 Jan 2027, 12:00 AM',
+      },
+      { SORTING: 4, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Manager', APPROVAL_TYPE_NAME: 'Pending' },
+    ]);
+    expect(Object.values(model.approvalChanges).every((changed) => changed === false)).toBe(true);
+  });
+
+  test.each([
+    [true, 'Yes', '28 Feb 2027, 12:00 AM', false],
+    [true, 'Yes', '31 Jan 2027, 12:00 AM', true],
+    [true, 'No', null, true],
+    [false, 'Yes', '28 Feb 2027, 12:00 AM', true],
+  ])('compares temporary adjustment display when proposed=%p and action=%s', (proposed, action, validTo, changed) => {
+    const model = mapRequestToEmailModel({
+      IS_TEMPORARY_PROPOSED: proposed,
+      PROPOSED_VALID_FROM: '2026-12-01',
+      PROPOSED_VALID_TO: '2027-02-28',
+    }, '-', [
+      {
+        SORTING: 3, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Manager', APPROVAL_TYPE_NAME: 'Approved',
+        TEMPORARY: action, VALID_FROM: '01 Dec 2026, 12:00 AM', VALID_TO: validTo,
+      },
+      { SORTING: 4, CURRENT_CYCLE: true, APPROVER_TYPE_NAME: 'Manager', APPROVAL_TYPE_NAME: 'Pending' },
+    ]);
+    expect(model.approvalChanges.temporaryYes).toBe(changed);
+  });
+
   test('hides last-action details when the last actioned step was BDS Review', () => {
-    const model = mapRequestToEmailModel({}, '-', [
+    const model = mapRequestToEmailModel({ IS_PERMANENT_PROPOSED: true }, '-', [
       { APPROVER_TYPE_NAME: 'Requester', APPROVAL_TYPE_NAME: 'Requested', APPROVER_NAME: 'ANM-ANUSORNM', SORTING: 1, CURRENT_CYCLE: true },
       { APPROVER_TYPE_NAME: 'BDS Review', APPROVAL_TYPE_NAME: 'Verified', APPROVER_NAME: 'NUC-NUTTAPONGC', SORTING: 2, CURRENT_CYCLE: true },
       { APPROVER_TYPE_NAME: 'Section Manager Approve (Finance)', APPROVAL_TYPE_NAME: 'Pending', APPROVER_NAME: 'TRP-TRIPORNP', SORTING: 3, CURRENT_CYCLE: true },
@@ -236,6 +368,13 @@ describe('requestEmailModelService', () => {
 
     expect(model.lastActionedStep).toEqual(expect.objectContaining({ approverType: 'BDS Review' }));
     expect(model.hideLastActionedDetails).toBe(true);
+    const fs = require('fs');
+    const path = require('path');
+    const handlebars = require('handlebars');
+    const html = handlebars.compile(fs.readFileSync(path.join(__dirname, '..', 'templates', 'request-approval.hbs'), 'utf8'))(model);
+    expect(html).not.toContain('Latest Approval Action by');
+    expect(html).toMatch(/<td>Permanent Adjustment<\/td>\s*<td><span class="status-yes">&#10003;<\/span><\/td>/);
+    expect(html).toContain('Summary All Steps');
   });
 
   test('uses the last approved movement for the Final email without changing the shared last action', () => {

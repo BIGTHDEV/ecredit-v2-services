@@ -295,6 +295,11 @@ credit values, conditions, and adjustment details), `creditDetailsSummary`,
 summary, the latest current-cycle credit suggestion, the current pending step,
 and the previous actioned step shown for decision support).
 
+Approval, Final, and Rejected emails compare the Credit Team's proposed values
+with the relevant latest action and highlight changed values. Temporary
+adjustments compare their displayed date range; BDS Review action details remain
+hidden. Draft emails are unchanged.
+
 Recipient policy:
 
 - DEV/QAS send `TO` only to the logged-in tester (`req.user.profile.LOGGED_IN_EMAIL`, or
@@ -309,6 +314,9 @@ Recipient policy:
   In DEV/QAS, the "Show for testing only." footer displays these intended TO/CC
   recipients while delivery remains restricted to the tester. Missing team or
   requester email recipients cause an explicit error rather than fallback delivery.
+  Draft Request Type is built from `IS_TERM_REQUESTED` and `IS_LIMIT_REQUESTED`
+  followed by `Rating`; Request Reason uses `DESCRIPTION` and BAE Remark uses
+  `REQUESTED_NOTES`. These fields are refreshed from the request on each delivery.
 - Resending uses the current runtime environment and current logged-in tester, not
   the environment or tester stored in an old email log. PRD retains logged recipients
   except for `request-draft`, which uses the current team and requester.
