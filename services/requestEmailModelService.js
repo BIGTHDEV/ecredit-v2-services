@@ -321,6 +321,7 @@ function mapRequestToEmailModel(request, dear = '-', approvalHistory = []) {
     amountBank: formatMoney(request.PROPOSED_BANK_GUARANTEE_AMOUNT),
     amountDeposit: formatMoney(request.PROPOSED_CASH_DEPOSIT_AMOUNT),
     opinion: valueOrDash(request.PROPOSED_DISPLAYED_NOTES),
+    showCreditTeamComment: !isMissing(request.PROPOSED_DISPLAYED_NOTES),
     creditTermExisting: valueOrDash(request.existingTerm?.NAME),
     creditTermRequested: valueOrDash(request.requestedTerm?.NAME),
     creditTermProposed: valueOrDash(request.proposedTerm?.NAME),

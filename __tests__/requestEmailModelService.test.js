@@ -140,6 +140,20 @@ describe('requestEmailModelService', () => {
     expect(model.showAdditionalConditions).toBe(false);
   });
 
+  test('hides the Credit Team Comment table when the displayed opinion is missing', () => {
+    const model = mapRequestToEmailModel({ PROPOSED_DISPLAYED_NOTES: '  ' });
+    const fs = require('fs');
+    const path = require('path');
+    const handlebars = require('handlebars');
+    const html = handlebars.compile(
+      fs.readFileSync(path.join(__dirname, '..', 'templates', 'request-approval.hbs'), 'utf8'),
+    )(model);
+
+    expect(model.showCreditTeamComment).toBe(false);
+    expect(html).not.toContain('<td class="label">Credit Team Comment</td>');
+    expect(html).toContain('<th>Credit Team Recommendation</th>');
+  });
+
   test('uses the displayed Opinion instead of Description in email models', () => {
     const model = mapRequestToEmailModel({
       PROPOSED_DISPLAYED_NOTES: '123',
