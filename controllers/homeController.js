@@ -63,7 +63,30 @@ async function getHealthStatus(req, res, next) {
   }
 }
 
+async function getKumaStatus(req, res, next) {
+  try {
+    const correlationId = res.locals.correlationId || 'N/A';
+
+    res.set('Cache-Control', 'no-store');
+    res.status(200).json({
+      success: true,
+      data: {
+        status: 'up',
+        timestamp: new Date().toISOString(),
+      },
+      correlationId,
+    });
+  } catch (error) {
+    logger.error(`Error in getKumaStatus: ${error.message}`, {
+      correlationId: res.locals.correlationId,
+      stack: error.stack,
+    });
+    next(error);
+  }
+}
+
 module.exports = {
   getHome,
   getHealthStatus,
+  getKumaStatus,
 };

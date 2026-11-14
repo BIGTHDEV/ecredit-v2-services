@@ -480,6 +480,7 @@ tail -f logs/ecredit-dev-*.txt
 Monitor API health:
 ```bash
 curl -k https://localhost:3035/dev/api/health/live
+curl -k https://localhost:3035/dev/api/health/kuma
 curl -k https://localhost:3035/dev/api/health/ready
 ```
 

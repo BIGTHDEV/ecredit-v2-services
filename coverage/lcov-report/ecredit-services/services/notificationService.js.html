@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">8.66% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>11/127</span>
+                <span class='fraction'>0/127</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">10.28% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>11/107</span>
+                <span class='fraction'>0/107</span>
             </div>
         
             
@@ -327,18 +327,18 @@
 <a name='L262'></a><a href='#L262'>262</a>
 <a name='L263'></a><a href='#L263'>263</a>
 <a name='L264'></a><a href='#L264'>264</a>
-<a name='L265'></a><a href='#L265'>265</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
+<a name='L265'></a><a href='#L265'>265</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -581,7 +581,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -591,18 +591,18 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { v4: uuidv4 } = require('uuid');
-const { getModels } = require('../models');
-const { formatThaiDateTime } = require('../helpers/thaiDateTime');
-const { employeeCode } = require('../helpers/userIdentity');
-const { Op } = require('sequelize');
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { v4: uuidv4 } = <span class="cstat-no" title="statement not covered" >require('uuid');</span>
+const { getModels } = <span class="cstat-no" title="statement not covered" >require('../models');</span>
+const { formatThaiDateTime } = <span class="cstat-no" title="statement not covered" >require('../helpers/thaiDateTime');</span>
+const { employeeCode } = <span class="cstat-no" title="statement not covered" >require('../helpers/userIdentity');</span>
+const { Op } = <span class="cstat-no" title="statement not covered" >require('sequelize');</span>
 &nbsp;
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
-const APPROVER_EVENTS = new Set(['submit', 'approve', 'final']);
-const SYSTEM_ADMIN_ROLE_ID = 'd854d840-d18c-4a7d-87c1-a9186f8664e5';
+const DEFAULT_LIMIT = <span class="cstat-no" title="statement not covered" >20;</span>
+const MAX_LIMIT = <span class="cstat-no" title="statement not covered" >100;</span>
+const APPROVER_EVENTS = <span class="cstat-no" title="statement not covered" >new Set(['submit', 'approve', 'final']);</span>
+const SYSTEM_ADMIN_ROLE_ID = <span class="cstat-no" title="statement not covered" >'d854d840-d18c-4a7d-87c1-a9186f8664e5';</span>
 &nbsp;
-const EVENT_TITLES = {
+const EVENT_TITLES = <span class="cstat-no" title="statement not covered" >{</span>
   submit: 'New request for your approval',
   approve: 'New request for your approval',
   final: 'Request approved by all approvers',
@@ -845,7 +845,7 @@ async function <span class="fstat-no" title="function not covered" >markAllRead(
 <span class="cstat-no" title="statement not covered" >  return { updated, unreadCount: 0 };</span>
 }
 &nbsp;
-module.exports = {
+<span class="cstat-no" title="statement not covered" >module.exports = {</span>
   collectRecipients,
   createWorkflowNotifications,
   createSystemAdminErrorNotifications,
@@ -862,7 +862,7 @@ module.exports = {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-11-12T09:22:50.687Z
+                at 2026-11-14T08:24:43.824Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

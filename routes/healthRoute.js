@@ -18,6 +18,12 @@ const router = express.Router();
 router.get('/live', healthController.getHealthStatus);
 
 /**
+ * GET /{env}/api/health/kuma
+ * Public liveness probe for Uptime Kuma
+ */
+router.get('/kuma', healthController.getKumaStatus);
+
+/**
  * GET /{env}/api/health/ready
  * Readiness probe - indicates if application is ready to handle requests
  * Checks database connectivity
@@ -26,8 +32,8 @@ router.get('/live', healthController.getHealthStatus);
 router.get('/ready', healthController.getHealthStatus);
 
 router.post('/crm', authenticationMiddleware, async (req, res) => {
-	res.set('Cache-Control', 'no-store');
-	res.json({ success: true, data: await checkReadiness() });
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, data: await checkReadiness() });
 });
 
 module.exports = router;

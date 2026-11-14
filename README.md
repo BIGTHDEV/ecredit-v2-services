@@ -424,6 +424,15 @@ Liveness probe - indicates if application is running
 }
 ```
 
+#### GET `/api/health/kuma`
+Public liveness probe for Uptime Kuma. No authentication is required. Configure Kuma to make an HTTP(S) GET request to `https://<host>/<env>/api/health/kuma` (for example, `https://localhost:3035/dev/api/health/kuma`). Treat HTTP 200 as up; this check confirms the API process is responding and does not verify database or downstream service readiness.
+
+```bash
+curl -i https://<host>/<env>/api/health/kuma
+```
+
+The response includes `data.status: "up"` and a timestamp.
+
 #### GET `/api/health/ready`
 Readiness probe - indicates if application is ready to handle requests
 

@@ -49,6 +49,7 @@ const endpoints = [
     maintenanceExempt: true,
   }],
   ['get', '/health/live', 'Health', 'Check liveness', 'Liveness probe; confirms the process is responding. Does not verify database readiness.', { public: true, maintenanceExempt: true, dataSchema: { $ref: '#/components/schemas/HealthData' } }],
+  ['get', '/health/kuma', 'Health', 'Check Uptime Kuma status', 'Public liveness probe for Uptime Kuma. Returns HTTP 200 while the API process is responding; does not verify database or downstream service readiness.', { public: true, maintenanceExempt: true, dataSchema: { $ref: '#/components/schemas/HealthData' } }],
   ['get', '/health/ready', 'Health', 'Check readiness endpoint', 'Returns the health heartbeat payload. This route currently uses the same handler as /health/live and does not perform a database readiness check.', { public: true, maintenanceExempt: true, dataSchema: { $ref: '#/components/schemas/HealthData' } }],
   ['post', '/health/crm', 'Health', 'Check CRM readiness', 'Checks the Salesforce/CRM synchronization readiness for the current environment.', {
     body: requestBody({ type: 'object', additionalProperties: true }, 'An empty JSON object is accepted.', false),

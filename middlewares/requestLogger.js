@@ -19,7 +19,8 @@ const config = require('../config/env');
  * @param {Function} next - Express next middleware function
  */
 function requestLoggerMiddleware(req, res, next) {
-  if (req.method === 'POST' && req.path === `/${config.environment}/api/health/crm`) {
+  if ((req.method === 'POST' && req.path === `/${config.environment}/api/health/crm`)
+    || (req.method === 'GET' && req.path === `/${config.environment}/api/health/kuma`)) {
     return next();
   }
   const correlationId = res.locals.correlationId || 'N/A';
