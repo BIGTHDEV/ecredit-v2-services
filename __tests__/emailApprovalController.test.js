@@ -3,6 +3,7 @@
 jest.mock('../services/emailApprovalActionService', () => ({
   confirmEmailApprovalAction: jest.fn(),
   getEmailApprovalAction: jest.fn(),
+  getEmailApprovalHistory: jest.fn(),
 }));
 jest.mock('../services/requestWorkflowNotificationService', () => ({
   notifyBestEffort: jest.fn(),
@@ -12,7 +13,26 @@ jest.mock('../services/salesforceStatusSyncService', () => ({ syncRequestStatusS
 const emailApprovalActionService = require('../services/emailApprovalActionService');
 const { notifyBestEffort } = require('../services/requestWorkflowNotificationService');
 const { syncRequestStatusSafely } = require('../services/salesforceStatusSyncService');
-const { confirmAction } = require('../controllers/emailApprovalController');
+const { confirmAction, getHistory } = require('../controllers/emailApprovalController');
+
+describe('emailApprovalController.getHistory', () => {
+  it('returns approval history for the email action token', async () => {
+    const data = [{ approvalStep: 2, approverName: 'APPROVER', status: 'Approved' }];
+    emailApprovalActionService.getEmailApprovalHistory.mockResolvedValue(data);
+    const req = { params: { token: 'token' } };
+    const res = { locals: { correlationId: 'correlation-1' }, status: jest.fn().mockReturnThis(), json: jest.fn() };
+
+    await getHistory(req, res, jest.fn());
+
+    expect(emailApprovalActionService.getEmailApprovalHistory).toHaveBeenCalledWith('token');
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data,
+      correlationId: 'correlation-1',
+    });
+  });
+});
 
 describe('emailApprovalController.confirmAction', () => {
   beforeEach(() => {

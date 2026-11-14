@@ -2,9 +2,11 @@
 
 const jwt = require('jsonwebtoken');
 const { getDatabase } = require('../config/database');
+const requestService = require('../services/requestService');
 const {
   createEmailApprovalToken,
   getEmailApprovalAction,
+  getEmailApprovalHistory,
   confirmEmailApprovalAction,
 } = require('../services/emailApprovalActionService');
 
@@ -19,6 +21,10 @@ jest.mock('../config/env', () => ({
 
 jest.mock('../config/database', () => ({
   getDatabase: jest.fn(),
+}));
+
+jest.mock('../services/requestService', () => ({
+  listApprovalHistory: jest.fn(),
 }));
 
 const WAITING_APPROVAL_STATUS_ID = '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b';
@@ -91,6 +97,96 @@ describe('emailApprovalActionService request status guard', () => {
         replacements: expect.objectContaining({ waitingStatusId: WAITING_APPROVAL_STATUS_ID }),
       }),
     );
+  });
+
+  it('keeps requester and BDS steps while excluding pending approval actions', async () => {
+    const database = createDatabase(jest.fn().mockResolvedValue([approval]));
+    getDatabase.mockReturnValue(database);
+    requestService.listApprovalHistory.mockResolvedValue([
+      {
+        SORTING: 3,
+        APPROVAL_STEP: 1,
+        APPROVER_ID: '1002',
+        APPROVER_TYPE_NAME: 'Section Manager Approve (Finance)',
+        APPROVER_NAME: 'WI-OLDER',
+        APPROVAL_TYPE_NAME: 'Approved',
+        COMMENT: 'Older approval',
+        LAST_UPDATE_DATE: '10 Nov 2026, 09:00 AM',
+        UPDATED_AT: '2026-11-10T09:00:00Z',
+        APPROVER_EMAIL: 'older@example.com',
+      },
+      {
+        SORTING: 4,
+        APPROVAL_STEP: 2,
+        APPROVER_ID: '1003',
+        APPROVER_TYPE_NAME: 'Manager Approve (Finance)',
+        APPROVER_NAME: 'WI-PENDING-2',
+        APPROVAL_TYPE_NAME: 'Pending',
+        COMMENT: '',
+        LAST_UPDATE_DATE: '11 Nov 2026, 09:00 AM',
+        UPDATED_AT: '2026-11-11T09:00:00Z',
+        APPROVER_EMAIL: 'latest@example.com',
+      },
+      {
+        SORTING: 5,
+        APPROVAL_STEP: 3,
+        APPROVER_ID: '1004',
+        APPROVER_TYPE_NAME: 'Manager Approve (Commercial)',
+        APPROVER_NAME: 'WI-PENDING',
+        APPROVAL_TYPE_NAME: 'Pending',
+        COMMENT: '',
+        LAST_UPDATE_DATE: '13 Nov 2026, 09:00 AM',
+        UPDATED_AT: '2026-11-13T09:00:00Z',
+      },
+      {
+        SORTING: 1,
+        APPROVER_ID: 'requester',
+        APPROVER_TYPE_NAME: 'Requester',
+        APPROVER_NAME: 'ANM-ANUSORNM',
+        APPROVAL_TYPE_NAME: 'Requested',
+        COMMENT: 'Request comment',
+        LAST_UPDATE_DATE: '17 Oct 2026, 03:51 PM',
+        UPDATED_AT: '2026-10-17T08:51:00Z',
+      },
+      {
+        SORTING: 2,
+        APPROVER_ID: 'bds-reviewer',
+        APPROVER_TYPE_NAME: 'BDS Review',
+        APPROVER_NAME: 'NUC-NUTTAPONGC',
+        APPROVAL_TYPE_NAME: 'Verified',
+        COMMENT: 'Credit Opinion',
+        LAST_UPDATE_DATE: '09 Nov 2026, 09:54 AM',
+        UPDATED_AT: '2026-11-09T02:54:00Z',
+      },
+    ]);
+
+    await expect(getEmailApprovalHistory('token')).resolves.toEqual([
+      {
+        approvalStep: 3,
+        approverTypeName: 'Section Manager Approve (Finance)',
+        approverName: 'WI-OLDER',
+        status: 'Approved',
+        comment: 'Older approval',
+        lastUpdateDate: '10 Nov 2026, 09:00 AM',
+      },
+      {
+        approvalStep: 2,
+        approverTypeName: 'BDS Review',
+        approverName: 'NUC-NUTTAPONGC',
+        status: 'Verified',
+        comment: 'Credit Opinion',
+        lastUpdateDate: '09 Nov 2026, 09:54 AM',
+      },
+      {
+        approvalStep: 1,
+        approverTypeName: 'Requester',
+        approverName: 'ANM-ANUSORNM',
+        status: 'Requested',
+        comment: 'Request comment',
+        lastUpdateDate: '17 Oct 2026, 03:51 PM',
+      },
+    ]);
+    expect(requestService.listApprovalHistory).toHaveBeenCalledWith('request-1');
   });
 
   it('decodes compact token claims before querying for the pending approval', async () => {

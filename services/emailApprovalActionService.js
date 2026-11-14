@@ -3,6 +3,7 @@ const config = require('../config/env');
 const { getDatabase } = require('../config/database');
 const { QueryTypes } = require('sequelize');
 const { propagateApprovedValues } = require('./approvalWorkflowService');
+const requestService = require('./requestService');
 
 const PENDING_APPROVAL_TYPE_ID = 'b4c27a6c-ab7c-4ce5-b885-997f9104c23d';
 const WAITING_APPROVAL_STATUS_ID = '4ba2cdc6-47aa-41bd-99a0-79e1e6b0831b';
@@ -139,6 +140,45 @@ async function getEmailApprovalAction(token) {
     allowBackward: Boolean(approval.ALLOW_BACKWARD),
     commentRequired: payload.action === 'reject' || payload.action === 'backward',
   };
+}
+
+async function getEmailApprovalHistory(token) {
+  const payload = verifyEmailApprovalToken(token);
+  await findPendingApproval(payload);
+  const history = await requestService.listApprovalHistory(payload.requestId);
+  let workflowStep = 0;
+  const parallelSteps = new Map();
+
+  return history
+    .slice()
+    .sort((left, right) => Number(left.SORTING) - Number(right.SORTING))
+    .map((movement) => {
+      const parallelKey = movement.PARALLEL_KEYS?.trim();
+      const existingStep = parallelKey ? parallelSteps.get(parallelKey) : undefined;
+      if (existingStep !== undefined) return { movement, workflowStep: existingStep };
+
+      workflowStep += 1;
+      if (parallelKey) parallelSteps.set(parallelKey, workflowStep);
+      return { movement, workflowStep };
+    })
+    .filter(({ movement }) => Number(movement.SORTING) <= 2
+      || String(movement.APPROVAL_TYPE_NAME || '').trim().toLowerCase() !== 'pending')
+    .sort((left, right) => {
+      const leftTimestamp = Date.parse(left.movement.UPDATED_AT);
+      const rightTimestamp = Date.parse(right.movement.UPDATED_AT);
+      const validLeftTimestamp = Number.isNaN(leftTimestamp) ? Number.NEGATIVE_INFINITY : leftTimestamp;
+      const validRightTimestamp = Number.isNaN(rightTimestamp) ? Number.NEGATIVE_INFINITY : rightTimestamp;
+      if (validLeftTimestamp !== validRightTimestamp) return validRightTimestamp - validLeftTimestamp;
+      return Number(right.movement.SORTING) - Number(left.movement.SORTING);
+    })
+    .map(({ movement, workflowStep: step }) => ({
+      approvalStep: step,
+      approverTypeName: movement.APPROVER_TYPE_NAME || '',
+      approverName: movement.APPROVER_NAME || '',
+      status: movement.APPROVAL_TYPE_NAME || '',
+      comment: movement.COMMENT || '',
+      lastUpdateDate: movement.LAST_UPDATE_DATE || '',
+    }));
 }
 
 async function confirmEmailApprovalAction(token, comment) {
@@ -282,5 +322,6 @@ module.exports = {
   createEmailApprovalToken,
   verifyEmailApprovalToken,
   getEmailApprovalAction,
+  getEmailApprovalHistory,
   confirmEmailApprovalAction,
 };

@@ -11,6 +11,15 @@ async function getAction(req, res, next) {
   }
 }
 
+async function getHistory(req, res, next) {
+  try {
+    const data = await emailApprovalActionService.getEmailApprovalHistory(req.params.token);
+    res.status(200).json({ success: true, data, correlationId: res.locals.correlationId || 'N/A' });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function confirmAction(req, res, next) {
   try {
     const data = await emailApprovalActionService.confirmEmailApprovalAction(req.params.token, req.body?.comment);
@@ -58,4 +67,4 @@ async function confirmAction(req, res, next) {
   }
 }
 
-module.exports = { getAction, confirmAction };
+module.exports = { getAction, getHistory, confirmAction };
